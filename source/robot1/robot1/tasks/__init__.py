@@ -4,14 +4,17 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 """Package containing task implementations for the extension."""
-
+# 初始化任务子包：仅导入 manager_based，从而间接触发注册
+from . import manager_based as _manager_based  # noqa: F401
+__all__ = ["manager_based"]
 ##
 # Register Gym environments.
 ##
-
+'''
 from isaaclab_tasks.utils import import_packages
 
 # The blacklist is used to prevent importing configs from sub-packages
 _BLACKLIST_PKGS = ["utils", ".mdp"]
 # Import all configs in this package
 import_packages(__name__, _BLACKLIST_PKGS)
+'''

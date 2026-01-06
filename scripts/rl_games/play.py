@@ -79,7 +79,7 @@ import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.utils import get_checkpoint_path
 from isaaclab_tasks.utils.hydra import hydra_task_config
 
-import robot1.tasks  # noqa: F401
+import robot1  # noqa: F401
 
 
 @hydra_task_config(args_cli.task, "rl_games_cfg_entry_point")
