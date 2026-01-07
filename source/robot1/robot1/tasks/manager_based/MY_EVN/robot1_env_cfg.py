@@ -18,7 +18,7 @@ from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
-from .mdp import SkidSteerLegObsCfg,SkidSteerLegRewardsCfg,SkidSteerLegEventsCfg
+from .mdp import SkidSteerLegObsCfg,SkidSteerLegRewardsCfg,SkidSteerLegEventsCfg,SkidSteerLegCurriculumCfg
 from .mdp.actions import ActionsCfg
 import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
 from .robot1 import ROBOT1_CFG
@@ -138,7 +138,7 @@ class CommandsCfg:
 
     base_velocity = mdp.UniformVelocityCommandCfg(
         asset_name="robot",
-        resampling_time_range=(15.0, 15.0),
+        resampling_time_range=(8.0, 8.0),
         rel_standing_envs=0.02,
         rel_heading_envs=1.0,
         heading_command=True,
@@ -168,6 +168,8 @@ class TerminationsCfg:
 @configclass
 class CurriculumCfg:
     """Curriculum terms for the MDP."""
+    """课程学习配置：随着训练动态调整环境难度"""
+    
     pass
     #terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)
 
@@ -194,8 +196,8 @@ class ROBOT1RoughEnvCfg(ManagerBasedRLEnvCfg):
     #terminations: TerminationsCfg = None
     #events: SkidSteerLegEventsCfg = None
     events: SkidSteerLegEventsCfg = SkidSteerLegEventsCfg()
-    #curriculum: CurriculumCfg = CurriculumCfg()
-    curriculum: CurriculumCfg = None
+    curriculum: CurriculumCfg = SkidSteerLegCurriculumCfg()
+    #curriculum: CurriculumCfg = None
 
     def __post_init__(self):
         """Post initialization."""

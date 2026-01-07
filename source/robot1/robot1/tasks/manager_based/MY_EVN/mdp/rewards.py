@@ -95,19 +95,19 @@ class SkidSteerLegRewardsCfg:
     # 1) 速度跟踪（指数核）[4]
     track_lin_vel_xy_exp = RewTerm(
         func=mdp.rewards.track_lin_vel_xy_exp,
-        params={"command_name": "base_velocity", "std": 0.05},  # std 越小，偏差罚得越快
-        weight=2.0,
+        params={"command_name": "base_velocity", "std": 0.1},  # std 越小，偏差罚得越快
+        weight=8.0,
     )
     track_ang_vel_z_exp = RewTerm(
         func=mdp.rewards.track_ang_vel_z_exp,
-        params={"command_name": "base_velocity", "std": 0.05},
-        weight=5.0,
+        params={"command_name": "base_velocity", "std": 0.1},
+        weight=4.0,
     )
 
     # 2) 车身稳定/抑制弹跳 [4]
-    flat_orientation_l2 = RewTerm(func=mdp.rewards.flat_orientation_l2, weight=-0.010)
-    ang_vel_xy_l2       = RewTerm(func=mdp.rewards.ang_vel_xy_l2,       weight=-0.010)
-    lin_vel_z_l2        = RewTerm(func=mdp.rewards.lin_vel_z_l2,        weight=-0.010)
+    flat_orientation_l2 = RewTerm(func=mdp.rewards.flat_orientation_l2, weight=-0.005)
+    ang_vel_xy_l2       = RewTerm(func=mdp.rewards.ang_vel_xy_l2,       weight=-0.005)
+    lin_vel_z_l2        = RewTerm(func=mdp.rewards.lin_vel_z_l2,        weight=-0.005)
 
     # 3) 调距关节使用与平滑（自定义）
     leg_center_l2 = RewTerm(
@@ -129,13 +129,13 @@ class SkidSteerLegRewardsCfg:
             "base_width": 0.5,     # 与动作项 base_width 一致
             "wheel_radius": 0.05,  # 与动作项 wheel_radius 一致
         },
-        weight=-0.001,
+        weight=-0.005,
     )
 
     # 5) 能耗与控制平滑 [4]
     dof_torques_l2 = RewTerm(func=mdp.rewards.joint_torques_l2, weight=-1.0e-5)
     dof_acc_l2     = RewTerm(func=mdp.rewards.joint_acc_l2,     weight=-2.5e-7)
-    action_rate_l2 = RewTerm(func=mdp.rewards.action_rate_l2,   weight=-0.001)
+    action_rate_l2 = RewTerm(func=mdp.rewards.action_rate_l2,   weight=-0.005)
 
     # 6) 可选：卡住终止的惩罚（依赖 TerminationManager 的 "stuck" 条目）[4][5]
     #stuck_penalty = RewTerm(
@@ -159,5 +159,5 @@ class SkidSteerLegRewardsCfg:
             ),
             "max_air_time": 0.5,
         },
-        weight=-0.010,   # 先给一个比较温和的权重，后面看效果再调
+        weight=-0.005,   # 先给一个比较温和的权重，后面看效果再调
     )

@@ -23,7 +23,7 @@ class SkidSteerLegEventsCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=["base_link"]),
-            "mass_distribution_params": (-2.0, 3.0),  # 加法扰动
+            "mass_distribution_params": (-1.0, 2.0),  # 加法扰动
             "operation": "add",
             "distribution": "uniform",
             "recompute_inertia": True,

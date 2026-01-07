@@ -15,9 +15,11 @@ import torch
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
+from isaaclab.utils import configclass
 from isaaclab.assets import Articulation
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.terrains import TerrainImporter
+from isaaclab.managers import CurriculumTermCfg as CurrTerm
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
@@ -80,3 +82,128 @@ def increase_reward_weight_over_time(
         term_cfg = env.reward_manager.get_term_cfg(reward_term_name)
         term_cfg.weight += increase
         env.reward_manager.set_term_cfg(reward_term_name, term_cfg)
+
+# 添加到 curriculums.py 末尾
+
+def anneal_reward_term_param(
+    env: ManagerBasedRLEnv,
+    env_ids: Sequence[int],
+    term_name: str,
+    param_name: str,
+    start_val: float,
+    end_val: float,
+    total_steps: int,
+) -> torch.Tensor:
+    """
+    随着时间推移退火（改变）奖励项的参数（如 std）。
+    在 total_steps 步内，将 param_name 的值从 start_val 线性插值到 end_val。
+    """
+    # 计算当前的进度 (0.0 到 1.0)
+    current_step = env.common_step_counter
+    
+    # 如果超过了设定的步数，就固定在 end_val，不再修改
+    if current_step >= total_steps:
+        return
+
+    # 线性插值计算新的值
+    alpha = current_step / float(total_steps)
+    new_val = start_val + (end_val - start_val) * alpha
+
+    # 获取当前的配置并更新
+    # 注意：这假设 set_term_cfg 开销不大，或者 IsaacLab 能够处理动态参数更新
+    try:
+        term_cfg = env.reward_manager.get_term_cfg(term_name)
+        # 只有值发生变化时才更新，减少开销
+        if term_cfg.params.get(param_name) != new_val:
+            term_cfg.params[param_name] = new_val
+            env.reward_manager.set_term_cfg(term_name, term_cfg)
+    except Exception as e:
+        print(f"Error updating curriculum param for {term_name}: {e}")
+
+def anneal_reward_term_weight(
+    env: ManagerBasedRLEnv,
+    env_ids: Sequence[int],
+    term_name: str,
+    start_weight: float,
+    end_weight: float,
+    total_steps: int,
+) -> None:
+    """
+    权重退火：随着训练步数，将指定奖励项的权重从 start_weight 线性过渡到 end_weight。
+    """
+    current_step = env.common_step_counter
+    
+    if current_step >= total_steps:
+        new_weight = end_weight
+    else:
+        alpha = current_step / float(total_steps)
+        new_weight = start_weight + (end_weight - start_weight) * alpha
+
+    try:
+        term_cfg = env.reward_manager.get_term_cfg(term_name)
+        if term_cfg.weight != new_weight:
+            term_cfg.weight = new_weight
+    except Exception:
+        pass
+    return None
+        
+        
+@configclass
+class SkidSteerLegCurriculumCfg:
+    """课程学习配置：随着训练动态调整环境难度"""
+    
+    anneal_lin_vel_std = CurrTerm(
+        func=anneal_reward_term_param,
+        params={
+            "term_name": "track_lin_vel_xy_exp", 
+            "param_name": "std",
+            "start_val": 1.0,           # 初始：允许 ±1m/s 的误差仍有较高奖励
+            "end_val": 0.3,             # 最终：必须非常精准 (您原本的设定)
+            "total_steps": 1.0e8,       # 在 2亿步(约一半训练程)内完成收紧
+        },
+    )
+    
+    # 如果角速度也难学，加上这个
+    anneal_ang_vel_std = CurrTerm(
+        func=anneal_reward_term_param,
+        params={
+            "term_name": "track_ang_vel_z_exp",
+            "param_name": "std",
+            "start_val": 1.0,
+            "end_val": 0.3, 
+            "total_steps": 1.0e8,
+        },
+    )
+
+    # --- B. 惩罚项权重：由无到有 (weight: 0.0 -> -0.005) ---
+    # 这解决了“因惧怕惩罚而不敢动”的问题
+    # 针对 rewards.py [1] 中的惩罚项
+    anneal_slip_penalty = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "slip_consistency", # 对应 rewards.py 中的变量名
+            "start_weight": 0.0,             # 初始：不惩罚打滑
+            "end_weight": -0.005,            # 最终：施加惩罚 (您原本的设定)
+            "total_steps": 5.0e7,            # 较快引入惩罚(1亿步)，尽早规范动作
+        },
+    )
+    
+    anneal_bounce_penalty = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "lin_vel_z_l2",     # 抑制弹跳
+            "start_weight": 0.0,
+            "end_weight": -0.005,
+            "total_steps": 5.0e7,
+        },
+    )
+
+    anneal_tilt_penalty = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "ang_vel_xy_l2",    # 抑制倾斜
+            "start_weight": 0.0,
+            "end_weight": -0.005,
+            "total_steps": 1.0e8,
+        },
+    )
