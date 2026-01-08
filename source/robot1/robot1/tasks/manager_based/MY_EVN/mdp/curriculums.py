@@ -145,6 +145,8 @@ def anneal_reward_term_weight(
             term_cfg.weight = new_weight
     except Exception:
         pass
+    
+    
     return None
         
         
@@ -158,8 +160,8 @@ class SkidSteerLegCurriculumCfg:
             "term_name": "track_lin_vel_xy_exp", 
             "param_name": "std",
             "start_val": 1.0,           # 初始：允许 ±1m/s 的误差仍有较高奖励
-            "end_val": 0.3,             # 最终：必须非常精准 (您原本的设定)
-            "total_steps": 1.0e8,       # 在 2亿步(约一半训练程)内完成收紧
+            "end_val": 0.1,             # 最终：必须非常精准 (您原本的设定)
+            "total_steps": 5.0e4,       # 在 2亿步(约一半训练程)内完成收紧
         },
     )
     
@@ -170,8 +172,8 @@ class SkidSteerLegCurriculumCfg:
             "term_name": "track_ang_vel_z_exp",
             "param_name": "std",
             "start_val": 1.0,
-            "end_val": 0.3, 
-            "total_steps": 1.0e8,
+            "end_val": 0.1, 
+            "total_steps": 5.0e4,
         },
     )
 
@@ -183,8 +185,8 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "slip_consistency", # 对应 rewards.py 中的变量名
             "start_weight": 0.0,             # 初始：不惩罚打滑
-            "end_weight": -0.005,            # 最终：施加惩罚 (您原本的设定)
-            "total_steps": 5.0e7,            # 较快引入惩罚(1亿步)，尽早规范动作
+            "end_weight": -0.05,            # 最终：施加惩罚 (您原本的设定)
+            "total_steps": 6.0e4,            # 较快引入惩罚(1亿步)，尽早规范动作
         },
     )
     
@@ -193,8 +195,8 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "lin_vel_z_l2",     # 抑制弹跳
             "start_weight": 0.0,
-            "end_weight": -0.005,
-            "total_steps": 5.0e7,
+            "end_weight": -0.05,
+            "total_steps": 6.0e4,
         },
     )
 
@@ -203,7 +205,7 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "ang_vel_xy_l2",    # 抑制倾斜
             "start_weight": 0.0,
-            "end_weight": -0.005,
-            "total_steps": 1.0e8,
+            "end_weight": -0.05,
+            "total_steps": 6.0e4,
         },
     )

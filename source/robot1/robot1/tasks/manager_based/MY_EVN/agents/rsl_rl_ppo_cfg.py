@@ -10,8 +10,8 @@ from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, R
 
 @configclass
 class PPORunnerCfg(RslRlOnPolicyRunnerCfg):
-    num_steps_per_env = 64
-    max_iterations = 1500
+    num_steps_per_env = 128
+    max_iterations = 1000
     save_interval = 50
     experiment_name = "youxia_manager"
     empirical_normalization = True

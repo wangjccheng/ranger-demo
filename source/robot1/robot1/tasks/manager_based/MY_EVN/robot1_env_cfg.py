@@ -138,7 +138,7 @@ class CommandsCfg:
 
     base_velocity = mdp.UniformVelocityCommandCfg(
         asset_name="robot",
-        resampling_time_range=(8.0, 8.0),
+        resampling_time_range=(5.0, 8.0),
         rel_standing_envs=0.02,
         rel_heading_envs=1.0,
         heading_command=True,
@@ -184,7 +184,7 @@ class ROBOT1RoughEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the locomotion velocity-tracking environment."""
 
     # Scene settings
-    scene: MySceneCfg = MySceneCfg(num_envs=2048, env_spacing=2.5)
+    scene: MySceneCfg = MySceneCfg(num_envs=1024, env_spacing=2.5)
     # Basic settings
     observations: SkidSteerLegObsCfg = SkidSteerLegObsCfg()
     actions: ActionsCfg = ActionsCfg()
