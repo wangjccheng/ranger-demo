@@ -86,7 +86,7 @@ class MySceneCfg(InteractiveSceneCfg):
         prim_path="/World/ground",
         terrain_type="generator",          # ★ 字段 A：用生成器
         terrain_generator=WAVE_TERRAINS_CFG,  # ★ 字段 B：指定刚才的波浪生成器
-        max_init_terrain_level=7,          # 结合 curriculum 时的最大片区难度，可照旧用
+        max_init_terrain_level=0,          # 结合 curriculum 时的最大片区难度，可照旧用
         collision_group=-1,
         physics_material=sim_utils.RigidBodyMaterialCfg(
             friction_combine_mode="multiply",
@@ -138,7 +138,7 @@ class CommandsCfg:
 
     base_velocity = mdp.UniformVelocityCommandCfg(
         asset_name="robot",
-        resampling_time_range=(5.0, 8.0),
+        resampling_time_range=(6.0, 6.0),
         rel_standing_envs=0.02,
         rel_heading_envs=1.0,
         heading_command=True,

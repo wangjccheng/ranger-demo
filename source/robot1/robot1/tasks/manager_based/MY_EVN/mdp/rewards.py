@@ -2,6 +2,7 @@ import torch
 import isaaclab.envs.mdp as mdp
 import isaaclab.utils.math as math_utils
 from isaaclab.utils import configclass
+from isaaclab.envs import ManagerBasedRLEnv
 from isaaclab.managers import RewardTermCfg as RewTerm, SceneEntityCfg
 
 # ---------------------------
@@ -92,6 +93,37 @@ def log_base_pitch(env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> 
 # 奖励配置（与动作/命令对齐）
 # ---------------------------
 
+def flat_orientation_with_tolerance(
+    env: ManagerBasedRLEnv, 
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    tolerance_deg: float = 2.0  # 容忍度（度）
+) -> torch.Tensor:
+    """
+    带死区的平稳奖励：
+    在 tolerance_deg 范围内不惩罚，超过后施加平方惩罚。
+    这允许车身随地形有轻微起伏，但防止剧烈倾斜。
+    """
+    # 1. 获取投影重力 (0, 0, -1) 在机体系下的向量 [N, 3]
+    # 如果车身水平，proj_grav 约为 (0, 0, -1)
+    proj_grav = env.scene[asset_cfg.name].data.projected_gravity_b
+    
+    # 2. 提取 x, y 分量 (对应 Roll 和 Pitch 的倾斜程度)
+    grav_xy = proj_grav[:, :2]  # [N, 2]
+    
+    # 3. 计算当前的倾斜幅度 (约为 sin(theta))
+    tilt_magnitude = torch.norm(grav_xy, dim=1) # [N]
+    
+    # 4. 计算死区阈值 (sin(tolerance))
+    threshold = torch.sin(torch.tensor(tolerance_deg * 3.14159 / 180.0, device=env.device))
+    
+    # 5. 计算超出部分
+    excess_tilt = torch.clamp(tilt_magnitude - threshold, min=0.0)
+    
+    # 6. 返回 L2 惩罚 (平方)
+    return torch.sum(excess_tilt**2, dim=0) # 返回形状通常需要匹配 [N] 或标量，这里建议直接返回 excess_tilt 的平方
+    # 注意：IsaacLab 的 RewTerm 会自动处理 batch 维度，通常返回 [N]
+    return excess_tilt ** 2
+
 @configclass
 class SkidSteerLegRewardsCfg:
     """
@@ -104,7 +136,7 @@ class SkidSteerLegRewardsCfg:
     track_lin_vel_xy_exp = RewTerm(
         func=mdp.rewards.track_lin_vel_xy_exp,
         params={"command_name": "base_velocity", "std": 0.1},  # std 越小，偏差罚得越快
-        weight=5.0,
+        weight=6.0,
     )
     track_ang_vel_z_exp = RewTerm(
         func=mdp.rewards.track_ang_vel_z_exp,
@@ -113,7 +145,7 @@ class SkidSteerLegRewardsCfg:
     )
 
     # 2) 车身稳定/抑制弹跳 [4]
-    flat_orientation_l2 = RewTerm(func=mdp.rewards.flat_orientation_l2, weight=-0.01)
+    flat_orientation_l2 = RewTerm(func=flat_orientation_with_tolerance, weight=-0.05)
     ang_vel_xy_l2       = RewTerm(func=mdp.rewards.ang_vel_xy_l2,       weight=-0.005)
     lin_vel_z_l2        = RewTerm(func=mdp.rewards.lin_vel_z_l2,        weight=-0.005)
 
@@ -121,7 +153,7 @@ class SkidSteerLegRewardsCfg:
     leg_center_l2 = RewTerm(
         func=leg_pos_center_l2,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names="g_.*")},
-        weight=-0.005,
+        weight=-0.001,
     )
     leg_speed_l2 = RewTerm(
         func=leg_vel_l2,
@@ -172,5 +204,5 @@ class SkidSteerLegRewardsCfg:
 
     log_pitch_monitor = RewTerm(
         func=log_base_pitch, # 指向上面定义的函数
-        weight=-0.0001,                      # 权重为 0，不影响训练
+        weight=-0.000573,                      # 权重为 0，不影响训练
     )

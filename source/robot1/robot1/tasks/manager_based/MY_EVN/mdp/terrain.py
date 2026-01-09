@@ -6,7 +6,7 @@ from isaaclab.utils import configclass
 # 如果你喜欢用 @configclass 也可以包一层，这里直接用原始 cfg 就行
 WAVE_TERRAINS_CFG = terrain_utils.TerrainGeneratorCfg(
     seed=0,
-    curriculum=False,           # 如果要配合 terrain_levels 做课程，可以先开
+    curriculum=True,           # 如果要配合 terrain_levels 做课程，可以先开
     size=(10.0, 10.0),         # 每个子地形的物理尺寸 [m]
     num_rows=8,                # 子地形行数
     num_cols=8,                # 子地形列数
@@ -19,7 +19,7 @@ WAVE_TERRAINS_CFG = terrain_utils.TerrainGeneratorCfg(
             size=(10.0, 10.0),
             horizontal_scale=0.05,
             vertical_scale=0.01,
-            amplitude_range=(0.10, 0.15),  # ★ 波浪振幅区间 [m]
+            amplitude_range=(0.07, 0.12),  # ★ 波浪振幅区间 [m]
             num_waves=3,                 # ★ 波数（越大，波越密）
             proportion=1.0,              # 只生成这一种子地形
         ),
