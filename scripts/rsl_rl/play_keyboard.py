@@ -163,7 +163,7 @@ def main():
     
     # 保存图片
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    save_path = f"robot_states_{timestamp}.png"
+    save_path = os.path.join(resume_path, f"robot_states_{timestamp}.png")
     plt.savefig(save_path)
     print(f"[INFO] Plot saved to: {os.path.abspath(save_path)}")
     

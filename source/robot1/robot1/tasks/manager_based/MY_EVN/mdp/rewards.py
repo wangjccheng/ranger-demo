@@ -96,7 +96,7 @@ def log_base_pitch(env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> 
 def flat_orientation_with_tolerance(
     env: ManagerBasedRLEnv, 
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
-    tolerance_deg: float = 2.0  # 容忍度（度）
+    tolerance_deg: float = 1.5  # 容忍度（度）
 ) -> torch.Tensor:
     """
     带死区的平稳奖励：
