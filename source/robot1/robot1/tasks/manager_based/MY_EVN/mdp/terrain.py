@@ -20,7 +20,7 @@ WAVE_TERRAINS_CFG = terrain_utils.TerrainGeneratorCfg(
             horizontal_scale=0.05,
             vertical_scale=0.01,
             amplitude_range=(0.07, 0.12),  # ★ 波浪振幅区间 [m]
-            num_waves=3,                 # ★ 波数（越大，波越密）
+            num_waves=5,                 # ★ 波数（越大，波越密）
             proportion=1.0,              # 只生成这一种子地形
         ),
     },

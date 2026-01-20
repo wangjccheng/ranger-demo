@@ -5,7 +5,7 @@
 
 from isaaclab.utils import configclass
 
-from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg
+from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg,RslRlPpoActorCriticRecurrentCfg
 
 
 @configclass
@@ -15,11 +15,17 @@ class PPORunnerCfg(RslRlOnPolicyRunnerCfg):
     save_interval = 50
     experiment_name = "youxia_manager"
     empirical_normalization = True
-    policy = RslRlPpoActorCriticCfg(
-        init_noise_std=0.9,
+# 使用带有循环层（RNN/LSTM）的网络配置
+    policy = RslRlPpoActorCriticRecurrentCfg(
+        init_noise_std=1.0,
+        # MLP 部分：处理特征提取
         actor_hidden_dims=[512, 256, 128],
         critic_hidden_dims=[512, 256, 128],
         activation="elu",
+        # RNN 部分：处理时序记忆
+        rnn_type="lstm",        # 可选 "lstm" 或 "gru"
+        rnn_hidden_dim=512,     # 记忆单元的维度
+        rnn_num_layers=1,       # 循环层的层数
     )
     algorithm = RslRlPpoAlgorithmCfg(
         value_loss_coef=1.0,
@@ -27,7 +33,7 @@ class PPORunnerCfg(RslRlOnPolicyRunnerCfg):
         clip_param=0.2,
         entropy_coef=0.001,
         num_learning_epochs=3,
-        num_mini_batches=4,
+        num_mini_batches=2,
         learning_rate=1.0e-4,
         schedule="adaptive",
         gamma=0.99,

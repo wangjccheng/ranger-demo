@@ -120,7 +120,7 @@ def flat_orientation_with_tolerance(
     excess_tilt = torch.clamp(tilt_magnitude - threshold, min=0.0)
     
     # 6. 返回 L2 惩罚 (平方)
-    return torch.sum(excess_tilt**2, dim=0) # 返回形状通常需要匹配 [N] 或标量，这里建议直接返回 excess_tilt 的平方
+    #return torch.sum(excess_tilt**2, dim=0) # 返回形状通常需要匹配 [N] 或标量，这里建议直接返回 excess_tilt 的平方
     # 注意：IsaacLab 的 RewTerm 会自动处理 batch 维度，通常返回 [N]
     return excess_tilt ** 2
 
@@ -132,7 +132,7 @@ class SkidSteerLegRewardsCfg:
     - wheel_cfg/几何参数需与动作项一致（轮距 W、半径 r、wheel 关节正则）。
     """
 
-    # 1) 速度跟踪（指数核）[4]
+    # 1） 速度跟踪（指数核）[4]
     track_lin_vel_xy_exp = RewTerm(
         func=mdp.rewards.track_lin_vel_xy_exp,
         params={"command_name": "base_velocity", "std": 0.1},  # std 越小，偏差罚得越快

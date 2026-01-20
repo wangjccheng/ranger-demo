@@ -72,9 +72,9 @@ class SkidSteerLegObsCfg:
     class Policy(ObsGroup):
         # 根状态
         #root_pos_w      = ObsTerm(func=mdp.root_pos_w, noise=Gnoise(std=0.05))                 # [N,3]
-        root_euler_xyz  = ObsTerm(func=root_euler_xyz,    noise=Gnoise(std=0.03))               # [N,3]
-        base_lin_vel    = ObsTerm(func=mdp.base_lin_vel,  noise=Gnoise(std=0.2), clip=(-10,10)) # [N,3]
-        base_ang_vel    = ObsTerm(func=mdp.base_ang_vel,  noise=Gnoise(std=0.2), clip=(-10,10)) # [N,3]
+        root_euler_xyz  = ObsTerm(func=root_euler_xyz,    noise=Gnoise(std=0.02))               # [N,3]
+        base_lin_vel    = ObsTerm(func=mdp.base_lin_vel,  noise=Gnoise(std=0.05), clip=(-10,10)) # [N,3]
+        base_ang_vel    = ObsTerm(func=mdp.base_ang_vel,  noise=Gnoise(std=0.05), clip=(-10,10)) # [N,3]
         projected_grav  = ObsTerm(func=mdp.projected_gravity, noise=Unoise(n_min=-0.03, n_max=0.03))  # [N,3]
 
         # 指令（与动作 [v, ω] 对齐）

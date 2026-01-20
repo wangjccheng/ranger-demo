@@ -108,11 +108,11 @@ class MySceneCfg(InteractiveSceneCfg):
     # sensors
     
     height_scanner = RayCasterCfg(
-        prim_path="{ENV_REGEX_NS}/Robot",  # 将robotis_op3/base替换为自己的机器人名称/base_link的link名称
+        prim_path="{ENV_REGEX_NS}/Robot/base_link",  # 将robotis_op3/base替换为自己的机器人名称/base_link的link名称
         offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
         ray_alignment="yaw",
-        pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
-        debug_vis=False,
+        pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[2.0, 2.0]),
+        debug_vis=True,
         mesh_prim_paths=["/World/ground"],
     )
     
@@ -202,7 +202,7 @@ class ROBOT1RoughEnvCfg(ManagerBasedRLEnvCfg):
     def __post_init__(self):
         """Post initialization."""
         # general settings
-        self.decimation = 4
+        self.decimation = 2
         self.episode_length_s = 80.0
         # simulation settings
         
@@ -216,7 +216,7 @@ class ROBOT1RoughEnvCfg(ManagerBasedRLEnvCfg):
         # update sensor update periods
         # we tick all the sensors based on the smallest update period (physics update period)
         if self.scene.height_scanner:
-            self.scene.height_scanner.prim_path = "{ENV_REGEX_NS}/Robot"  # 将robotis_op3/base替换为自己的机器人名称/base_link的link名称
+            self.scene.height_scanner.prim_path = "{ENV_REGEX_NS}/Robot/base_link"  # 将robotis_op3/base替换为自己的机器人名称/base_link的link名称
         if self.scene.height_scanner is not None:
             self.scene.height_scanner.update_period = self.decimation * self.sim.dt
         if self.scene.contact_forces is not None:
