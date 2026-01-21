@@ -145,7 +145,7 @@ class SkidSteerLegRewardsCfg:
     )
 
     # 2) 车身稳定/抑制弹跳 [4]
-    flat_orientation_l2 = RewTerm(func=flat_orientation_with_tolerance, weight=-0.1)
+    flat_orientation_l2 = RewTerm(func=flat_orientation_with_tolerance, weight=-1.0)
     ang_vel_xy_l2       = RewTerm(func=mdp.rewards.ang_vel_xy_l2,       weight=-0.005)
     lin_vel_z_l2        = RewTerm(func=mdp.rewards.lin_vel_z_l2,        weight=-0.005)
 
@@ -153,12 +153,12 @@ class SkidSteerLegRewardsCfg:
     leg_center_l2 = RewTerm(
         func=leg_pos_center_l2,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names="g_.*")},
-        weight=-0.001,
+        weight=-0.0005,
     )
     leg_speed_l2 = RewTerm(
         func=leg_vel_l2,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names="g_.*")},
-        weight=-0.001,
+        weight=-0.0005,
     )
 
     # 4) 打滑一致性（自定义）
@@ -175,7 +175,7 @@ class SkidSteerLegRewardsCfg:
     # 5) 能耗与控制平滑 [4]
     dof_torques_l2 = RewTerm(func=mdp.rewards.joint_torques_l2, weight=-1.0e-5)
     dof_acc_l2     = RewTerm(func=mdp.rewards.joint_acc_l2,     weight=-2.5e-7)
-    action_rate_l2 = RewTerm(func=mdp.rewards.action_rate_l2,   weight=-0.010)
+    action_rate_l2 = RewTerm(func=mdp.rewards.action_rate_l2,   weight=-0.0010)
 
     # 6) 可选：卡住终止的惩罚（依赖 TerminationManager 的 "stuck" 条目）[4][5]
     #stuck_penalty = RewTerm(
