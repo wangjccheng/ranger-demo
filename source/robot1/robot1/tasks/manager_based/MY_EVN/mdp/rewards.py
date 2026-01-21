@@ -136,16 +136,16 @@ class SkidSteerLegRewardsCfg:
     track_lin_vel_xy_exp = RewTerm(
         func=mdp.rewards.track_lin_vel_xy_exp,
         params={"command_name": "base_velocity", "std": 0.1},  # std 越小，偏差罚得越快
-        weight=6.0,
+        weight=3.0,
     )
     track_ang_vel_z_exp = RewTerm(
         func=mdp.rewards.track_ang_vel_z_exp,
         params={"command_name": "base_velocity", "std": 0.1},
-        weight=2.0,
+        weight=5.0,
     )
 
     # 2) 车身稳定/抑制弹跳 [4]
-    flat_orientation_l2 = RewTerm(func=flat_orientation_with_tolerance, weight=-0.05)
+    flat_orientation_l2 = RewTerm(func=flat_orientation_with_tolerance, weight=-0.1)
     ang_vel_xy_l2       = RewTerm(func=mdp.rewards.ang_vel_xy_l2,       weight=-0.005)
     lin_vel_z_l2        = RewTerm(func=mdp.rewards.lin_vel_z_l2,        weight=-0.005)
 
@@ -158,7 +158,7 @@ class SkidSteerLegRewardsCfg:
     leg_speed_l2 = RewTerm(
         func=leg_vel_l2,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names="g_.*")},
-        weight=-0.005,
+        weight=-0.001,
     )
 
     # 4) 打滑一致性（自定义）

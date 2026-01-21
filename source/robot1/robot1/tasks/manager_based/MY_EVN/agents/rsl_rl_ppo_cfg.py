@@ -11,7 +11,7 @@ from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, R
 @configclass
 class PPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 128
-    max_iterations = 2000
+    max_iterations = 3000
     save_interval = 50
     experiment_name = "youxia_manager"
     empirical_normalization = True
@@ -24,8 +24,8 @@ class PPORunnerCfg(RslRlOnPolicyRunnerCfg):
         activation="elu",
         # RNN 部分：处理时序记忆
         rnn_type="lstm",        # 可选 "lstm" 或 "gru"
-        rnn_hidden_dim=512,     # 记忆单元的维度
-        rnn_num_layers=1,       # 循环层的层数
+        rnn_hidden_dim=256,     # 记忆单元的维度
+        rnn_num_layers=2,       # 循环层的层数
     )
     algorithm = RslRlPpoAlgorithmCfg(
         value_loss_coef=1.0,
