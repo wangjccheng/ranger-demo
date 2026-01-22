@@ -17,7 +17,7 @@ class PPORunnerCfg(RslRlOnPolicyRunnerCfg):
     empirical_normalization = True
 # 使用带有循环层（RNN/LSTM）的网络配置
     policy = RslRlPpoActorCriticRecurrentCfg(
-        init_noise_std=1.0,
+        init_noise_std=0.8,
         # MLP 部分：处理特征提取
         actor_hidden_dims=[512, 256, 128],
         critic_hidden_dims=[512, 256, 128],
@@ -31,7 +31,7 @@ class PPORunnerCfg(RslRlOnPolicyRunnerCfg):
         value_loss_coef=1.0,
         use_clipped_value_loss=True,
         clip_param=0.2,
-        entropy_coef=0.001,
+        entropy_coef=0.005,
         num_learning_epochs=3,
         num_mini_batches=2,
         learning_rate=1.0e-4,

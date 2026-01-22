@@ -96,7 +96,7 @@ def log_base_pitch(env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> 
 def flat_orientation_with_tolerance(
     env: ManagerBasedRLEnv, 
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
-    tolerance_deg: float = 1.5  # 容忍度（度）
+    tolerance_deg: float = 1.0  # 容忍度（度）
 ) -> torch.Tensor:
     """
     带死区的平稳奖励：
@@ -141,11 +141,11 @@ class SkidSteerLegRewardsCfg:
     track_ang_vel_z_exp = RewTerm(
         func=mdp.rewards.track_ang_vel_z_exp,
         params={"command_name": "base_velocity", "std": 0.1},
-        weight=5.0,
+        weight=1.0,
     )
 
     # 2) 车身稳定/抑制弹跳 [4]
-    flat_orientation_l2 = RewTerm(func=flat_orientation_with_tolerance, weight=-1.0)
+    flat_orientation_l2 = RewTerm(func=flat_orientation_with_tolerance, weight=-2.0)
     ang_vel_xy_l2       = RewTerm(func=mdp.rewards.ang_vel_xy_l2,       weight=-0.005)
     lin_vel_z_l2        = RewTerm(func=mdp.rewards.lin_vel_z_l2,        weight=-0.005)
 
