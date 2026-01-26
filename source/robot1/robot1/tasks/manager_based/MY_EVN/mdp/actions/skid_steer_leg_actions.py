@@ -78,7 +78,7 @@ class SkidSteerLegAction(ActionTerm):
             return torch.tanh(cmd)
         else:
             return cmd
-
+    '''
     def process_actions(self, actions: torch.Tensor):
         # 保存原始动作
         self._raw_actions[:] = actions
@@ -103,7 +103,35 @@ class SkidSteerLegAction(ActionTerm):
         # 拼接回 processed 动作缓存（便于日志/可视化）
         self._processed_actions[:, :2] = base_cmd
         self._processed_actions[:, 2:] = leg_cmd
+    '''
+    def process_actions(self, actions: torch.Tensor):
+        # 保存原始动作
+        self._raw_actions[:] = actions
 
+        # 1) 底盘两维: 保持不变
+        base_raw = actions[:, :2]
+        base_cmd = base_raw * self._base_scale + self._base_offset
+        base_cmd = self._bound_base_cmd(base_cmd)
+        if self._no_reverse:
+            base_cmd[:, 0] = torch.clamp(base_cmd[:, 0], min=0.0)
+
+        # 2) 调距关节 M 维: 修改为速度指令处理
+        # ---------------- 修改开始 ----------------
+        leg_raw = actions[:, 2:]  # [N,M]
+        
+        # 直接使用 scale 和 offset。
+        # scale 现在代表 "最大目标角速度" (例如 10 rad/s)
+        # offset 通常设为 0.0
+        leg_cmd = leg_raw * self._leg_scale + self._leg_offset
+        
+        # (可选) 如果你想限制最大速度，可以加 clamp
+        # leg_cmd = torch.clamp(leg_cmd, -self._max_leg_vel, self._max_leg_vel)
+        # ---------------- 修改结束 ----------------
+
+        # 拼接回 processed 动作缓存
+        self._processed_actions[:, :2] = base_cmd
+        self._processed_actions[:, 2:] = leg_cmd
+        
     def apply_actions(self):
         # 从 processed 中取底盘命令
         v     = self._processed_actions[:, 0]  # [N]
@@ -122,7 +150,16 @@ class SkidSteerLegAction(ActionTerm):
         # 下发到轮子（速度控制）
         all_wheel_ids = list(self._left_ids) + list(self._right_ids)
         self._asset.set_joint_velocity_target(wheel_speeds, joint_ids=all_wheel_ids)
-
+# ---------------- 修改开始 ----------------
+        # 调距目标（速度控制）
+        # 注意：这里我们把 leg_targets 当作速度指令
+        leg_vel_targets = self._processed_actions[:, 2:]  # [N,M]
+        
+        # ★ 关键修改：使用 set_joint_velocity_target
+        # 同时，为了防止物理引擎残留位置目标，建议将位置目标设为 None (Isaac Lab底层通常会自动处理)
+        # 但显式调用 set_joint_velocity_target 是必须的。
+        self._asset.set_joint_velocity_target(leg_vel_targets, joint_ids=self._leg_ids)
+        # ---------------- 修改结束 ----------------
         # 调距目标（位置控制）
-        leg_targets = self._processed_actions[:, 2:]  # [N,M]
-        self._asset.set_joint_position_target(leg_targets, joint_ids=self._leg_ids)
+        #leg_targets = self._processed_actions[:, 2:]  # [N,M]
+        #self._asset.set_joint_position_target(leg_targets, joint_ids=self._leg_ids)

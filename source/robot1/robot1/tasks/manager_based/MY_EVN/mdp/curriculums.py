@@ -161,7 +161,7 @@ class SkidSteerLegCurriculumCfg:
             "param_name": "std",
             "start_val": 0.5,           # 初始：允许 ±1m/s 的误差仍有较高奖励
             "end_val": 0.15,             # 最终：必须非常精准 (您原本的设定)
-            "total_steps": 5.0e4,       # 在 2亿步(约一半训练程)内完成收紧
+            "total_steps": 1.0e5,       # 在 2亿步(约一半训练程)内完成收紧
         },
     )
     
@@ -173,7 +173,7 @@ class SkidSteerLegCurriculumCfg:
             "param_name": "std",
             "start_val": 0.5,
             "end_val": 0.15, 
-            "total_steps": 5.0e4,
+            "total_steps": 1.0e5,
         },
     )
 
@@ -186,7 +186,7 @@ class SkidSteerLegCurriculumCfg:
             "term_name": "slip_consistency", # 对应 rewards.py 中的变量名
             "start_weight": 0.0,             # 初始：不惩罚打滑
             "end_weight": -0.05,            # 最终：施加惩罚 (您原本的设定)
-            "total_steps": 9.0e4,            # 较快引入惩罚(1亿步)，尽早规范动作
+            "total_steps": 1.5e5,            # 较快引入惩罚(1亿步)，尽早规范动作
         },
     )
     
@@ -196,7 +196,7 @@ class SkidSteerLegCurriculumCfg:
             "term_name": "lin_vel_z_l2",     # 抑制弹跳
             "start_weight": 0.0,
             "end_weight": -0.1,
-            "total_steps": 9.0e4,
+            "total_steps": 1.8e5,
         },
     )
 
@@ -206,7 +206,16 @@ class SkidSteerLegCurriculumCfg:
             "term_name": "ang_vel_xy_l2",    # 抑制倾斜
             "start_weight": 0.0,
             "end_weight": -0.1,
-            "total_steps": 9.0e4,
+            "total_steps": 1.8e5,
+        },
+    )
+    dof_torques_penalty = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "dof_torques_l2",    # 抑制扭矩
+            "start_weight": 0.0,
+            "end_weight": -1.0e-5,
+            "total_steps": 1.8e5,
         },
     )
     terrain_levels = CurrTerm(func=terrain_levels_vel)

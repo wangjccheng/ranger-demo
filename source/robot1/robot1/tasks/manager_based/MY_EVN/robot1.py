@@ -55,17 +55,19 @@ ROBOT1_CFG = ArticulationCfg(
             effort_limit_sim=100,
             velocity_limit_sim=50.0,
             stiffness={
-            "g_lb": 400.0,
-            "g_lf": 400.0,
-            "g_rf": 400.0,
-            "g_rb": 400.0,
+            "g_lb": 0.0,
+            "g_lf": 0.0,
+            "g_rf": 0.0,
+            "g_rb": 0.0,
             },
+            #200
             damping={
-            "g_lb": 25.0,
-            "g_lf": 25.0,
-            "g_rf": 25.0,
-            "g_rb": 25.0,
+            "g_lb": 100.0,
+            "g_lf": 100.0,
+            "g_rf": 100.0,
+            "g_rb": 100.0,
             },
+            #30
                 ),
         "wheels": ImplicitActuatorCfg(
             joint_names_expr=[
@@ -84,10 +86,10 @@ ROBOT1_CFG = ArticulationCfg(
             "w_rb": 0.0,
             },
             damping={
-            "w_lb": 100.0,
-            "w_lf": 100.0,
-            "w_rf": 100.0,
-            "w_rb": 100.0,
+            "w_lb": 80.0,
+            "w_lf": 80.0,
+            "w_rf": 80.0,
+            "w_rb": 80.0,
             },
                 ),
     },
