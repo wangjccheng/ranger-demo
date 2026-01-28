@@ -21,21 +21,24 @@ from isaaclab.utils.noise import AdditiveGaussianNoiseCfg as Gnoise, AdditiveUni
 def masked_height_scan(env, sensor_cfg: SceneEntityCfg, mask_region: str = "front"):
     """
     带遮罩的高度扫描：模拟传感器盲区或遮挡。
-    Actor 只能看到这个版本，必须学会处理视野丢失的情况。
     """
-    # 1. 获取原始扫描数据 (相对于机器人根节点的 Z 轴高度差)
+    # 1. 获取传感器对象
     sensor = env.scene[sensor_cfg.name]
-    # data.pos_w [N, num_rays, 3] -> 取 Z 轴; robot.data.root_pos_w [N, 3] -> 取 Z 轴
-    # 结果: [N, num_rays]
-    raw_heights = sensor.data.pos_w[:, :, 2] - env.scene.robot.data.root_pos_w[:, 2:3]
+
+    # 2. ★★★ 修复点：使用 ray_hits_w (击中点) 而不是 pos_w (原点) ★★★
+    # ray_hits_w 形状: [N, num_rays, 3] -> 取 Z 轴
+    # root_pos_w 形状: [N, 3] -> 取 Z 轴
+    # 结果 raw_heights: [N, num_rays]
+    raw_heights = sensor.data.ray_hits_w[:, :, 2] - env.scene["robot"].data.root_pos_w[:, 2:3]
     
-    # 2. Reshape 为 2D 网格结构以便进行空间操作
-    # 假设 GridPattern 分辨率 0.1m, 范围 2.0x2.0m -> 20x20 网格
-    # 注意：这里的 20x20 是基于假设，实际需与 robot1_env_cfg.py 中的 RayCaster 分辨率匹配
+    # 3. 处理 NaN (如果射线没打中东西，Isaac Lab 可能返回 NaN 或大数值)
+    # 这一步是可选的，但为了训练稳定建议加上：将 NaN 替换为 -2.0 (或其他底部值)
+    raw_heights = torch.nan_to_num(raw_heights, nan=-2.0)
+
+    # 4. Reshape 为 2D 网格结构以便进行空间操作
     N = raw_heights.shape[0]
-    # 这里为了通用性，最好根据实际 ray 数计算，或者硬编码如果你确定尺寸
-    # 假设 num_rays = 400
-    grid_size = int(torch.sqrt(torch.tensor(raw_heights.shape[1])).item()) # e.g., 20
+    num_rays = raw_heights.shape[1]
+    grid_size = int(torch.sqrt(torch.tensor(num_rays)).item()) # e.g., 20
     grid_h = raw_heights.view(N, grid_size, grid_size)
     
     # 3. 应用遮罩 (Masking)

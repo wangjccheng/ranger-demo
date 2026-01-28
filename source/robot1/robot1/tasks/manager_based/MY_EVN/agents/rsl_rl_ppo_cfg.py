@@ -25,7 +25,7 @@ class PPORunnerCfg(RslRlOnPolicyRunnerCfg):
         # RNN 部分：处理时序记忆
         rnn_type="lstm",        # 可选 "lstm" 或 "gru"
         rnn_hidden_dim=256,     # 记忆单元的维度
-        rnn_num_layers=2,       # 循环层的层数
+        rnn_num_layers=1,       # 循环层的层数
     )
     algorithm = RslRlPpoAlgorithmCfg(
         value_loss_coef=1.0,
