@@ -119,7 +119,7 @@ def anneal_reward_term_param(
             env.reward_manager.set_term_cfg(term_name, term_cfg)
     except Exception as e:
         print(f"Error updating curriculum param for {term_name}: {e}")
-
+'''
 def anneal_reward_term_weight(
     env: ManagerBasedRLEnv,
     env_ids: Sequence[int],
@@ -148,7 +148,44 @@ def anneal_reward_term_weight(
     
     
     return None
+'''
+def anneal_reward_term_weight(
+    env: ManagerBasedRLEnv,
+    env_ids: Sequence[int],
+    term_name: str,
+    start_weight: float,
+    end_weight: float,
+    total_steps: int,
+) -> None:
+    """
+    权重退火：随着训练步数，将指定奖励项的权重从 start_weight 线性过渡到 end_weight。
+    """
+    current_step = env.common_step_counter
+    
+    # 计算新权重
+    if current_step >= total_steps:
+        new_weight = end_weight
+    else:
+        alpha = current_step / float(total_steps)
+        new_weight = start_weight + (end_weight - start_weight) * alpha
+
+    try:
+        # 1. 获取配置
+        term_cfg = env.reward_manager.get_term_cfg(term_name)
         
+        # 2. 检查是否需要更新（避免每步都重复设置，节省开销）
+        # 注意：浮点数比较最好用 math.isclose，或者直接比较
+        if term_cfg.weight != new_weight:
+            term_cfg.weight = new_weight
+            
+            # 3. ★★★ 关键修正：必须写回 Manager ★★★
+            env.reward_manager.set_term_cfg(term_name, term_cfg)
+            
+    except Exception as e:
+        # 建议打印错误，防止拼写错误导致课程未生效而你却不知道
+        print(f"[Warning] Failed to update weight for {term_name}: {e}")
+    
+    return None        
         
 @configclass
 class SkidSteerLegCurriculumCfg:
