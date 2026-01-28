@@ -7,6 +7,32 @@ from isaaclab.utils.noise import AdditiveGaussianNoiseCfg as Gnoise, AdditiveUni
 
 # --- 基础工具 ---
 
+def masked_height_scan(env, sensor_cfg: SceneEntityCfg, mask_region: str = "front"):
+    """
+    对高程图进行处理，删掉指定区域的高度信息。
+    """
+    # 1. 获取原始扫描数据 [N, num_rays]
+    sensor = env.scene[sensor_cfg.name]
+    raw_heights = sensor.data.pos_w[:, :, 2] - env.scene.robot.data.root_pos_w[:, 2:3]
+    
+    # 2. 假设您的扫描网格是 2.0m x 2.0m，分辨率 0.1m，则为 20x20 的网格
+    # 将其 reshape 为空间结构以便处理 [N, 20, 20]
+    N = raw_heights.shape[0]
+    grid_h = raw_heights.view(N, 20, 20)
+    
+    # 3. 模拟“删掉”某一区域（例如删掉机器人正前方的一块矩形区域）
+    # 假设索引 [15:, 5:15] 对应正前方区域
+    if mask_region == "front":
+        grid_h[:, 15:, 5:15] = 0.0  # 将该区域高度设为 0，模拟无障碍物或感知丢失
+    elif mask_region == "random_hole":
+        # 也可以模拟随机传感器故障
+        mask = torch.rand((20, 20), device=env.device) > 0.8
+        grid_h[:, mask] = -1.0 
+
+    # 4. 展平回一维向量返回给策略 [N, 400]
+    return grid_h.view(N, -1)
+
+
 def root_euler_xyz(env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """世界系根姿态欧拉角 (x,y,z)，单位 rad。"""
     rx, ry, rz = math_utils.euler_xyz_from_quat(mdp.root_quat_w(env, asset_cfg))  # [3] 
@@ -72,7 +98,7 @@ class SkidSteerLegObsCfg:
     class Policy(ObsGroup):
         # 根状态
         #root_pos_w      = ObsTerm(func=mdp.root_pos_w, noise=Gnoise(std=0.05))                 # [N,3]
-        root_euler_xyz  = ObsTerm(func=root_euler_xyz,    noise=Gnoise(std=0.02))               # [N,3]
+        #root_euler_xyz  = ObsTerm(func=root_euler_xyz,    noise=Gnoise(std=0.02))               # [N,3]
         base_lin_vel    = ObsTerm(func=mdp.base_lin_vel,  noise=Gnoise(std=0.05), clip=(-10,10)) # [N,3]
         base_ang_vel    = ObsTerm(func=mdp.base_ang_vel,  noise=Gnoise(std=0.05), clip=(-10,10)) # [N,3]
         projected_grav  = ObsTerm(func=mdp.projected_gravity, noise=Unoise(n_min=-0.03, n_max=0.03))  # [N,3]
@@ -104,10 +130,18 @@ class SkidSteerLegObsCfg:
 
         # 可选：高度扫描（若场景有 height_scanner）
         
-        height_scan   = ObsTerm(func=mdp.height_scan,
-                                  params={"sensor_cfg": SceneEntityCfg("height_scanner"), "offset": 0.0},
-                                  clip=(-2.0, 2.0), noise=Unoise(n_min=-0.05, n_max=0.05))
-
+        #height_scan   = ObsTerm(func=mdp.height_scan,
+        #                          params={"sensor_cfg": SceneEntityCfg("height_scanner"), "offset": 0.0},
+        #                            clip=(-2.0, 2.0), noise=Unoise(n_min=-0.05, n_max=0.05))
+        height_scan = ObsTerm(
+            func=masked_height_scan,
+            params={
+            "sensor_cfg": SceneEntityCfg("height_scanner"),
+            "mask_region": "front" # 传入您想遮罩的模式
+        },
+            clip=(-2.0, 2.0)
+        )   
+         
         def __post_init__(self):
             self.concatenate_terms = True     # 组内拼接成单一向量 [22]
             self.enable_corruption = False    # 关闭组级腐化（条目噪声仍生效）

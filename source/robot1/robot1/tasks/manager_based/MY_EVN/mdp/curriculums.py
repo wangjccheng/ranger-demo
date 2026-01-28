@@ -182,7 +182,7 @@ class SkidSteerLegCurriculumCfg:
             "term_name": "flat_orientation_l2",  # 对应 rewards 配置中的名字
             "start_weight": -2.0,                # 初期：轻微惩罚，允许它歪歪扭扭地跑
             "end_weight": -100.0,                # 后期：重罚，强迫它收敛到水平姿态
-            "total_steps": 1.0e5,                # 在前 10万~20万步完成过渡
+            "total_steps": 1.5e5,                # 在前 10万~20万步完成过渡
         },
     )
 
@@ -224,7 +224,7 @@ class SkidSteerLegCurriculumCfg:
             "term_name": "dof_torques_l2",    # 抑制扭矩
             "start_weight": 0.0,
             "end_weight": -5.0e-7,
-            "total_steps": 2.0e5,
+            "total_steps": 1.8e5,
         },
     )
     terrain_levels = CurrTerm(func=terrain_levels_vel)

@@ -96,7 +96,7 @@ def log_base_pitch(env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> 
 def flat_orientation_with_tolerance(
     env: ManagerBasedRLEnv, 
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
-    tolerance_deg: float = 3.0  # 容忍度（度）
+    tolerance_deg: float = 2.0  # 容忍度（度）
 ) -> torch.Tensor:
     """
     带死区的平稳奖励：
@@ -141,7 +141,7 @@ class SkidSteerLegRewardsCfg:
     track_ang_vel_z_exp = RewTerm(
         func=mdp.rewards.track_ang_vel_z_exp,
         params={"command_name": "base_velocity", "std": 0.5},
-        weight=1.0,
+        weight=4.0,
     )
 
     # 2) 车身稳定/抑制弹跳 [4]
@@ -175,7 +175,7 @@ class SkidSteerLegRewardsCfg:
     # 5) 能耗与控制平滑 [4]
     dof_torques_l2 = RewTerm(func=mdp.rewards.joint_torques_l2, weight=0)
     dof_acc_l2     = RewTerm(func=mdp.rewards.joint_acc_l2,     weight=-2.5e-7)
-    action_rate_l2 = RewTerm(func=mdp.rewards.action_rate_l2,   weight=-0.0010)
+    action_rate_l2 = RewTerm(func=mdp.rewards.action_rate_l2,   weight=-0.010)
 
     # 6) 可选：卡住终止的惩罚（依赖 TerminationManager 的 "stuck" 条目）[4][5]
     #stuck_penalty = RewTerm(
@@ -199,7 +199,7 @@ class SkidSteerLegRewardsCfg:
             ),
             "max_air_time": 0.5,
         },
-        weight=-0.010,   # 先给一个比较温和的权重，后面看效果再调
+        weight=-0.0010,   # 先给一个比较温和的权重，后面看效果再调
     )
 
     log_pitch_monitor = RewTerm(

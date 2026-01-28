@@ -139,13 +139,13 @@ class CommandsCfg:
     base_velocity = mdp.UniformVelocityCommandCfg(
         asset_name="robot",
         resampling_time_range=(6.0, 6.0),
-        rel_standing_envs=0.02,
-        rel_heading_envs=1.0,
+        rel_standing_envs=0.05,
+        rel_heading_envs=0.5,
         heading_command=True,
         heading_control_stiffness=1.0,
         debug_vis=True,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(-1.5, 1.5), lin_vel_y=(0, 0), ang_vel_z=(-0.8, 0.8), heading=(-math.pi, math.pi)
+            lin_vel_x=(-1.0, 1.0), lin_vel_y=(0, 0), ang_vel_z=(-0.8, 0.8), heading=(-math.pi, math.pi)
         ),
     )
 
@@ -165,13 +165,7 @@ class TerminationsCfg:
     )
 
 
-@configclass
-class CurriculumCfg:
-    """Curriculum terms for the MDP."""
-    """课程学习配置：随着训练动态调整环境难度"""
-    
-    pass
-    #terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)
+
 
 
 ##
@@ -196,13 +190,13 @@ class ROBOT1RoughEnvCfg(ManagerBasedRLEnvCfg):
     #terminations: TerminationsCfg = None
     #events: SkidSteerLegEventsCfg = None
     events: SkidSteerLegEventsCfg = SkidSteerLegEventsCfg()
-    curriculum: CurriculumCfg = SkidSteerLegCurriculumCfg()
+    curriculum: SkidSteerLegCurriculumCfg = SkidSteerLegCurriculumCfg()
     #curriculum: CurriculumCfg = None
 
     def __post_init__(self):
         """Post initialization."""
         # general settings
-        self.decimation = 2
+        self.decimation = 5
         self.episode_length_s = 80.0
         # simulation settings
         
