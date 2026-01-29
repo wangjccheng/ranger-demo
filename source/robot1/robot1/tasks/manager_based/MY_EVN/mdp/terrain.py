@@ -41,7 +41,7 @@ WAVE_TERRAINS_CFG = TerrainGeneratorCfg(
     
     # 难度等级数量
     num_rows=10,  
-    num_cols=20, 
+    num_cols=10, 
     
     # ★ 核心修改：使用 HfWaveTerrainCfg 并修正参数
     sub_terrains={
@@ -50,7 +50,7 @@ WAVE_TERRAINS_CFG = TerrainGeneratorCfg(
             
             # --- 难度参数 (由简单到复杂) ---
             # amplitude_range: 波浪高度范围 (Level 0 -> Level 9)
-            amplitude_range=(0.0, 0.1), 
+            amplitude_range=(0.07, 0.12), 
             
             # num_waves: 波浪数量 (控制波浪的密集程度/频率)
             # 注意：这是一个固定值，不是 range。通常设置在 6 到 10 之间。
