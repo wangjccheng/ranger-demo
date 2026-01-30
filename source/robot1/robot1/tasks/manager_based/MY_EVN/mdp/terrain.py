@@ -1,4 +1,4 @@
-''''
+
 import isaaclab.terrains as terrain_utils
 from isaaclab.terrains.height_field.hf_terrains_cfg import HfWaveTerrainCfg
 from isaaclab.utils import configclass
@@ -61,3 +61,4 @@ WAVE_TERRAINS_CFG = TerrainGeneratorCfg(
     # 开启课程学习
     curriculum=True, 
 )
+'''
