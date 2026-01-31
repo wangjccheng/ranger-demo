@@ -175,7 +175,7 @@ class SkidSteerLegRewardsCfg:
     # 5) 能耗与控制平滑 [4]
     dof_torques_l2 = RewTerm(func=mdp.rewards.joint_torques_l2, weight=0)
     dof_acc_l2     = RewTerm(func=mdp.rewards.joint_acc_l2,     weight=-2.5e-7)
-    action_rate_l2 = RewTerm(func=mdp.rewards.action_rate_l2,   weight=-0.010)
+    action_rate_l2 = RewTerm(func=mdp.rewards.action_rate_l2,   weight=-0.050)
 
     # 6) 可选：卡住终止的惩罚（依赖 TerminationManager 的 "stuck" 条目）[4][5]
     #stuck_penalty = RewTerm(

@@ -55,17 +55,17 @@ ROBOT1_CFG = ArticulationCfg(
             effort_limit_sim=100,
             velocity_limit_sim=50.0,
             stiffness={
-            "g_lb": 0.01,
-            "g_lf": 0.01,
-            "g_rf": 0.01,
-            "g_rb": 0.01,
+            "g_lb": 0.001,
+            "g_lf": 0.001,
+            "g_rf": 0.001,
+            "g_rb": 0.001,
             },
             #200
             damping={
-            "g_lb": 80.0,
-            "g_lf": 80.0,
-            "g_rf": 80.0,
-            "g_rb": 80.0,
+            "g_lb": 40.0,
+            "g_lf": 40.0,
+            "g_rf": 40.0,
+            "g_rb": 40.0,
             },
             #30
                 ),
@@ -80,10 +80,10 @@ ROBOT1_CFG = ArticulationCfg(
             effort_limit=1000,
             velocity_limit=1000.0,
             stiffness={
-            "w_lb": 0.01,
-            "w_lf": 0.01,
-            "w_rf": 0.01,
-            "w_rb": 0.01,
+            "w_lb": 0.001,
+            "w_lf": 0.001,
+            "w_rf": 0.001,
+            "w_rb": 0.001,
             },
             damping={
             "w_lb": 80.0,

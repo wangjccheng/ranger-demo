@@ -241,7 +241,7 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "lin_vel_z_l2",     # 抑制弹跳
             "start_weight": 0.0,
-            "end_weight": -0.1,
+            "end_weight": -0.2,
             "total_steps": 1.8e5,
         },
     )
@@ -251,7 +251,7 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "ang_vel_xy_l2",    # 抑制倾斜
             "start_weight": 0.0,
-            "end_weight": -0.1,
+            "end_weight": -0.2,
             "total_steps": 1.8e5,
         },
     )
