@@ -76,6 +76,11 @@ from datetime import datetime
 
 from rsl_rl.runners import OnPolicyRunner
 
+import rsl_rl.runners.on_policy_runner
+from robot1.tasks.manager_based.MY_EVN.agents.cnn import CNNActorCriticRecurrent
+# 将自定义类塞入 RSL-RL runner 的作用域，使其可以通过字符串名字实例化
+rsl_rl.runners.on_policy_runner.CNNActorCriticRecurrent = CNNActorCriticRecurrent
+
 from isaaclab.envs import (
     DirectMARLEnv,
     DirectMARLEnvCfg,
@@ -172,7 +177,12 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         print(f"[INFO]: Loading model checkpoint from: {resume_path}")
         # load previously trained model
         runner.load(resume_path)
-
+    import  wandb
+    if agent_cfg.logger == "wandb":
+        print("[INFO] 正在将 CNN/GRU 策略网络挂载至 wandb 以监控梯度...")
+        # log="all" 表示同时记录参数值 (parameters) 和梯度 (gradients)
+        # log_freq=100 表示每 100 个 PPO update 记录一次，避免生成的数据过于庞大
+        wandb.watch(runner.alg.actor_critic, log="all", log_freq=100)
     # dump the configuration into log-directory
     dump_yaml(os.path.join(log_dir, "params", "env.yaml"), env_cfg)
     dump_yaml(os.path.join(log_dir, "params", "agent.yaml"), agent_cfg)

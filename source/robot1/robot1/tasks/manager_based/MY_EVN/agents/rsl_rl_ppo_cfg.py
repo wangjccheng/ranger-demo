@@ -7,15 +7,53 @@ from isaaclab.utils import configclass
 
 from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg,RslRlPpoActorCriticRecurrentCfg
 
-
+@configclass
+class PPORunnerCfg(RslRlOnPolicyRunnerCfg):
+    num_steps_per_env = 128
+    max_iterations = 2000
+    save_interval = 500  # 建议改大一点，解决硬盘占用问题
+    experiment_name = "youxia_manager"
+    empirical_normalization = True
+    
+    # 使用带有循环层的网络配置
+    policy = RslRlPpoActorCriticRecurrentCfg(
+        # ★ 1. 注入我们的自定义网络类名
+        class_name="CNNActorCriticRecurrent",
+        
+        init_noise_std=0.8,
+        # MLP 部分：处理特征提取 (处理 CNN 潜变量和本体感知的拼接)
+        actor_hidden_dims=[256, 128,64],
+        critic_hidden_dims=[256, 128,64],
+        activation="elu",
+        
+        # ★ 2. RNN 部分：切换为 GRU
+        rnn_type="gru",         
+        rnn_hidden_dim=128,     
+        rnn_num_layers=1,       
+    )
+    algorithm = RslRlPpoAlgorithmCfg(
+        value_loss_coef=1.0,
+        use_clipped_value_loss=True,
+        clip_param=0.2,
+        entropy_coef=0.01,
+        num_learning_epochs=5,
+        num_mini_batches=2,
+        learning_rate=5.0e-5,
+        schedule="adaptive",
+        gamma=0.99,
+        lam=0.95,
+        desired_kl=0.01,
+        max_grad_norm=1.0,
+    )
+'''
 @configclass
 class PPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 128
     max_iterations = 3500
-    save_interval = 50
+    save_interval = 500
     experiment_name = "youxia_manager"
     empirical_normalization = True
-# 使用带有循环层（RNN/LSTM）的网络配置
+# 使用带有循环层（RNN/LSTM)的网络配置
     policy = RslRlPpoActorCriticRecurrentCfg(
         init_noise_std=0.8,
         # MLP 部分：处理特征提取
@@ -41,3 +79,4 @@ class PPORunnerCfg(RslRlOnPolicyRunnerCfg):
         desired_kl=0.01,
         max_grad_norm=1.0,
     )
+'''
