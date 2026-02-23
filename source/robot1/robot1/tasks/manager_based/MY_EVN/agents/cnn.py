@@ -41,12 +41,12 @@ class CNNActorCriticRecurrent(ActorCriticRecurrent):
         # 包含两层卷积，将 20x20 降采样为 5x5
         self.cnn_encoder = nn.Sequential(
             nn.Conv2d(in_channels=1, out_channels=16, kernel_size=3, stride=2, padding=1),
-            nn.ELU(),
+            nn.ELU(inplace=True),
             nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, stride=2, padding=1),
-            nn.ELU(),
+            nn.ELU(inplace=True),
             nn.Flatten(),
             nn.Linear(32 * 5 * 5, self.latent_dim),
-            nn.ELU()
+            nn.ELU(inplace=True)
         )
 
     def process_obs(self, obs):

@@ -30,7 +30,7 @@ class SkidSteerLegActionCfg(ActionTermCfg):
     # 调距关节映射：二选一
     leg_rescale_to_limits: bool = True           # True 时用软限把 [-1,1] 反归一化到实际范围
     leg_scale: float = 1.0                       # False 时，线性映射的缩放
-    leg_offset: float = 0.0                      # False 时，线性映射的偏置
+    leg_offset: float = 0.3                      # False 时，线性映射的偏置
 
 
 @configclass

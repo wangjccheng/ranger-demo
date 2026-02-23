@@ -7,7 +7,7 @@ from isaaclab.utils import configclass
 # 如果你喜欢用 @configclass 也可以包一层，这里直接用原始 cfg 就行
 WAVE_TERRAINS_CFG = terrain_utils.TerrainGeneratorCfg(
     seed=0,
-    curriculum=True,           # 如果要配合 terrain_levels 做课程，可以先开
+    curriculum=False,           # 如果要配合 terrain_levels 做课程，可以先开
     size=(10.0, 10.0),         # 每个子地形的物理尺寸 [m]
     num_rows=8,                # 子地形行数
     num_cols=8,                # 子地形列数

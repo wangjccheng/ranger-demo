@@ -86,7 +86,7 @@ class MySceneCfg(InteractiveSceneCfg):
         prim_path="/World/ground",
         terrain_type="generator",          # ★ 字段 A：用生成器
         terrain_generator=WAVE_TERRAINS_CFG,  # ★ 字段 B：指定刚才的波浪生成器
-        max_init_terrain_level=0,          # 结合 curriculum 时的最大片区难度，可照旧用
+        max_init_terrain_level=7,          # 结合 curriculum 时的最大片区难度，可照旧用
         collision_group=-1,
         physics_material=sim_utils.RigidBodyMaterialCfg(
             friction_combine_mode="multiply",
@@ -112,7 +112,7 @@ class MySceneCfg(InteractiveSceneCfg):
         offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
         ray_alignment="yaw",
         pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[2.0, 2.0]),
-        debug_vis=True,
+        debug_vis=False,
         mesh_prim_paths=["/World/ground"],
     )
     
@@ -143,7 +143,7 @@ class CommandsCfg:
         rel_heading_envs=0.5,
         heading_command=True,
         heading_control_stiffness=1.0,
-        debug_vis=False,
+        debug_vis=True,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
             lin_vel_x=(-1.0, 1.0), lin_vel_y=(0, 0), ang_vel_z=(-0.8, 0.8), heading=(-math.pi, math.pi)
         ),
@@ -178,7 +178,7 @@ class ROBOT1RoughEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the locomotion velocity-tracking environment."""
 
     # Scene settings
-    scene: MySceneCfg = MySceneCfg(num_envs=1024, env_spacing=2.5)
+    scene: MySceneCfg = MySceneCfg(num_envs=512, env_spacing=2.5)
     # Basic settings
     observations: SkidSteerLegObsCfg = SkidSteerLegObsCfg()
     actions: ActionsCfg = ActionsCfg()
@@ -197,10 +197,10 @@ class ROBOT1RoughEnvCfg(ManagerBasedRLEnvCfg):
         """Post initialization."""
         # general settings
         self.decimation = 5
-        self.episode_length_s = 80.0
+        self.episode_length_s = 20.0
         # simulation settings
         
-        self.viewer.eye = (-40.0, 0.0, 6.0)       # 相机放高、放远一点
+        self.viewer.eye = (-60.0, 0.0, 6.0)       # 相机放高、放远一点
         self.viewer.look_at = (-1.0, 0.0, -1.0)   # 看向机器人附近
         
         self.sim.dt = 0.01

@@ -136,7 +136,7 @@ class SkidSteerLegRewardsCfg:
     track_lin_vel_xy_exp = RewTerm(
         func=mdp.rewards.track_lin_vel_xy_exp,
         params={"command_name": "base_velocity", "std": 0.5},  # std 越小，偏差罚得越快
-        weight=3.0,
+        weight=4.0,
     )
     track_ang_vel_z_exp = RewTerm(
         func=mdp.rewards.track_ang_vel_z_exp,
@@ -173,9 +173,9 @@ class SkidSteerLegRewardsCfg:
     )
 
     # 5) 能耗与控制平滑 [4]
-    dof_torques_l2 = RewTerm(func=mdp.rewards.joint_torques_l2, weight=0)
+    dof_torques_l2 = RewTerm(func=mdp.rewards.joint_torques_l2, weight=-1.0e-7)
     dof_acc_l2     = RewTerm(func=mdp.rewards.joint_acc_l2,     weight=-2.5e-7)
-    action_rate_l2 = RewTerm(func=mdp.rewards.action_rate_l2,   weight=-0.050)
+    action_rate_l2 = RewTerm(func=mdp.rewards.action_rate_l2,   weight=-0.0050)
 
     # 6) 可选：卡住终止的惩罚（依赖 TerminationManager 的 "stuck" 条目）[4][5]
     #stuck_penalty = RewTerm(
@@ -186,7 +186,7 @@ class SkidSteerLegRewardsCfg:
     contact_penalty = RewTerm(
         func=mdp.rewards.is_terminated_term,
         params={"term_keys": "base_contact"},
-        weight=-1.0,
+        weight=-100.0,
     )
     
     # 新增: 足端离地惩罚
@@ -204,5 +204,5 @@ class SkidSteerLegRewardsCfg:
 
     log_pitch_monitor = RewTerm(
         func=log_base_pitch, # 指向上面定义的函数
-        weight=-0.000573,                      # 权重为 0，不影响训练
+        weight=-0.0000573,                      # 权重为 0，不影响训练
     )

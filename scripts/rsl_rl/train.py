@@ -20,7 +20,7 @@ import cli_args  # isort: skip
 parser = argparse.ArgumentParser(description="Train an RL agent with RSL-RL.")
 parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
 parser.add_argument("--video_length", type=int, default=400, help="Length of the recorded video (in steps).")
-parser.add_argument("--video_interval", type=int, default=5000, help="Interval between video recordings (in steps).")
+parser.add_argument("--video_interval", type=int, default=20000, help="Interval between video recordings (in steps).")
 parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
 parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
@@ -177,12 +177,22 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         print(f"[INFO]: Loading model checkpoint from: {resume_path}")
         # load previously trained model
         runner.load(resume_path)
-    import  wandb
+    import wandb
+    # 确保当前配置使用了 wandb 记录器
     if agent_cfg.logger == "wandb":
+        print("[INFO] 准备挂载 wandb 监控...")
+        
+        # 核心修复：如果 wandb 还未初始化，我们显式拉起它
+        if wandb.run is None:
+            wandb.init(
+                project="isaaclab", # 这里可以改成你在 wandb 上想要的工程名字
+                name=agent_cfg.experiment_name,
+                sync_tensorboard=True, # 必须开启，以兼容 RSL-RL 的底层 tensorboard 输出
+                config=agent_cfg.to_dict()
+            )
+            
         print("[INFO] 正在将 CNN/GRU 策略网络挂载至 wandb 以监控梯度...")
-        # log="all" 表示同时记录参数值 (parameters) 和梯度 (gradients)
-        # log_freq=100 表示每 100 个 PPO update 记录一次，避免生成的数据过于庞大
-        wandb.watch(runner.alg.actor_critic, log="all", log_freq=100)
+        wandb.watch(runner.alg.policy, log="all", log_freq=100)
     # dump the configuration into log-directory
     dump_yaml(os.path.join(log_dir, "params", "env.yaml"), env_cfg)
     dump_yaml(os.path.join(log_dir, "params", "agent.yaml"), agent_cfg)

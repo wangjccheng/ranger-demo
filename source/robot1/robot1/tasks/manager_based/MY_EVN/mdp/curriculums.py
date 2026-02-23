@@ -197,7 +197,7 @@ class SkidSteerLegCurriculumCfg:
             "term_name": "track_lin_vel_xy_exp", 
             "param_name": "std",
             "start_val": 0.5,           # 初始：允许 ±1m/s 的误差仍有较高奖励
-            "end_val": 0.15,             # 最终：必须非常精准 (您原本的设定)
+            "end_val": 0.2,             # 最终：必须非常精准 (您原本的设定)
             "total_steps": 1.0e5,       # 在 2亿步(约一半训练程)内完成收紧
         },
     )
@@ -209,7 +209,7 @@ class SkidSteerLegCurriculumCfg:
             "term_name": "track_ang_vel_z_exp",
             "param_name": "std",
             "start_val": 0.5,
-            "end_val": 0.15, 
+            "end_val": 0.2, 
             "total_steps": 1.0e5,
         },
     )
@@ -255,6 +255,7 @@ class SkidSteerLegCurriculumCfg:
             "total_steps": 1.8e5,
         },
     )
+    '''
     dof_torques_penalty = CurrTerm(
         func=anneal_reward_term_weight,
         params={
@@ -264,4 +265,5 @@ class SkidSteerLegCurriculumCfg:
             "total_steps": 1.8e5,
         },
     )
+    '''
     terrain_levels = CurrTerm(func=terrain_levels_vel)
