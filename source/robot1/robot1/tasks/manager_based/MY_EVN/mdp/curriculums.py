@@ -3,6 +3,193 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+from __future__ import annotations
+
+import torch
+from collections.abc import Sequence
+from typing import TYPE_CHECKING
+
+from isaaclab.utils import configclass
+from isaaclab.assets import Articulation
+from isaaclab.managers import SceneEntityCfg
+from isaaclab.terrains import TerrainImporter
+from isaaclab.managers import CurriculumTermCfg as CurrTerm
+
+if TYPE_CHECKING:
+    from isaaclab.envs import ManagerBasedRLEnv
+
+
+def terrain_levels_vel(
+    env: ManagerBasedRLEnv, env_ids: Sequence[int], asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+) -> torch.Tensor:
+    asset: Articulation = env.scene[asset_cfg.name]
+    terrain: TerrainImporter = env.scene.terrain
+    command = env.command_manager.get_command("base_velocity")
+    distance = torch.norm(asset.data.root_pos_w[env_ids, :2] - env.scene.env_origins[env_ids, :2], dim=1)
+    move_up = distance > terrain.cfg.terrain_generator.size[0] / 2
+    move_down = distance < torch.norm(command[env_ids, :2], dim=1) * env.max_episode_length_s * 0.5
+    move_down *= ~move_up
+    terrain.update_env_origins(env_ids, move_up, move_down)
+    return torch.mean(terrain.terrain_levels.float())
+
+
+def increase_reward_weight_over_time(
+        env: ManagerBasedRLEnv,
+        env_ids: Sequence[int],
+        reward_term_name : str,
+        increase : float,
+        episodes_per_increase : int = 1,
+        max_increases: int = torch.inf,
+        ) -> torch.Tensor:
+    num_episodes = env.common_step_counter // env.max_episode_length
+    num_increases = num_episodes // episodes_per_increase
+
+    if num_increases > max_increases:
+        return
+
+    if env.common_step_counter % env.max_episode_length != 0:
+        return
+
+    if (num_episodes + 1) % episodes_per_increase == 0: 
+        term_cfg = env.reward_manager.get_term_cfg(reward_term_name)
+        term_cfg.weight += increase
+        env.reward_manager.set_term_cfg(reward_term_name, term_cfg)
+
+
+def anneal_reward_term_param(
+    env: ManagerBasedRLEnv,
+    env_ids: Sequence[int],
+    term_name: str,
+    param_name: str,
+    start_val: float,
+    end_val: float,
+    total_steps: int,
+) -> torch.Tensor:
+    current_step = env.common_step_counter
+    if current_step >= total_steps:
+        return
+
+    alpha = current_step / float(total_steps)
+    new_val = start_val + (end_val - start_val) * alpha
+
+    try:
+        term_cfg = env.reward_manager.get_term_cfg(term_name)
+        if term_cfg.params.get(param_name) != new_val:
+            term_cfg.params[param_name] = new_val
+            env.reward_manager.set_term_cfg(term_name, term_cfg)
+    except Exception as e:
+        print(f"Error updating curriculum param for {term_name}: {e}")
+
+
+def anneal_reward_term_weight(
+    env: ManagerBasedRLEnv,
+    env_ids: Sequence[int],
+    term_name: str,
+    start_weight: float,
+    end_weight: float,
+    total_steps: int,
+) -> None:
+    current_step = env.common_step_counter
+    
+    if current_step >= total_steps:
+        new_weight = end_weight
+    else:
+        alpha = current_step / float(total_steps)
+        new_weight = start_weight + (end_weight - start_weight) * alpha
+
+    try:
+        term_cfg = env.reward_manager.get_term_cfg(term_name)
+        if term_cfg.weight != new_weight:
+            term_cfg.weight = new_weight
+            env.reward_manager.set_term_cfg(term_name, term_cfg)
+            
+    except Exception as e:
+        print(f"[Warning] Failed to update weight for {term_name}: {e}")
+    
+    return None        
+        
+
+@configclass
+class SkidSteerLegCurriculumCfg:
+    """课程学习配置：随着训练动态调整环境难度"""
+    
+    anneal_lin_vel_std = CurrTerm(
+        func=anneal_reward_term_param,
+        params={
+            "term_name": "track_lin_vel_xy_exp", 
+            "param_name": "std",
+            "start_val": 0.5,           
+            "end_val": 0.2,             
+            "total_steps": 1.0e5,       
+        },
+    )
+    
+    anneal_ang_vel_std = CurrTerm(
+        func=anneal_reward_term_param,
+        params={
+            "term_name": "track_ang_vel_z_exp",
+            "param_name": "std",
+            "start_val": 0.5,
+            "end_val": 0.2, 
+            "total_steps": 1.0e5,
+        },
+    )
+    
+    anneal_flat_orientation_penalty = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "flat_orientation_l2",  
+            "start_weight": -2.0,                
+            "end_weight": -100.0,                
+            "total_steps": 1.5e5,                
+        },
+    )
+
+    # [修改] 提高打滑惩罚的终值，逼迫其使用轮子
+    anneal_slip_penalty = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "slip_consistency", 
+            "start_weight": 0.0,             
+            "end_weight": -0.05,            
+            "total_steps": 1.8e5,            
+        },
+    )
+    
+    # [修改] 给颠簸加上初始惩罚底线，防止早期纵容
+    anneal_bounce_penalty = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "lin_vel_z_l2",     
+            "start_weight": -0.05,
+            "end_weight": -0.5,
+            "total_steps": 1.8e5,
+        },
+    )
+
+    # [修改] 给倾斜加上初始惩罚底线，防止早期纵容
+    anneal_tilt_penalty = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "ang_vel_xy_l2",    
+            "start_weight": -0.05,
+            "end_weight": -0.5,
+            "total_steps": 1.8e5,
+        },
+    )
+
+    terrain_levels = CurrTerm(func=terrain_levels_vel)
+
+
+
+
+
+'''
+# Copyright (c) 2022-2025, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
 """Common functions that can be used to create curriculum for the learning environment.
 
 The functions can be passed to the :class:`isaaclab.managers.CurriculumTermCfg` object to enable
@@ -119,7 +306,7 @@ def anneal_reward_term_param(
             env.reward_manager.set_term_cfg(term_name, term_cfg)
     except Exception as e:
         print(f"Error updating curriculum param for {term_name}: {e}")
-'''
+
 def anneal_reward_term_weight(
     env: ManagerBasedRLEnv,
     env_ids: Sequence[int],
@@ -148,7 +335,7 @@ def anneal_reward_term_weight(
     
     
     return None
-'''
+
 def anneal_reward_term_weight(
     env: ManagerBasedRLEnv,
     env_ids: Sequence[int],
@@ -255,7 +442,7 @@ class SkidSteerLegCurriculumCfg:
             "total_steps": 1.8e5,
         },
     )
-    '''
+    
     dof_torques_penalty = CurrTerm(
         func=anneal_reward_term_weight,
         params={
@@ -265,5 +452,6 @@ class SkidSteerLegCurriculumCfg:
             "total_steps": 1.8e5,
         },
     )
-    '''
+    
     terrain_levels = CurrTerm(func=terrain_levels_vel)
+'''

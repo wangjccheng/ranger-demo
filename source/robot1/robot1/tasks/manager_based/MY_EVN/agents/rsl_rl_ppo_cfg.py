@@ -20,7 +20,7 @@ class PPORunnerCfg(RslRlOnPolicyRunnerCfg):
         # ★ 1. 注入我们的自定义网络类名
         class_name="CNNActorCriticRecurrent",
         
-        init_noise_std=0.8,
+        init_noise_std=0.5,
         # MLP 部分：处理特征提取 (处理 CNN 潜变量和本体感知的拼接)
         actor_hidden_dims=[256, 128,64],
         critic_hidden_dims=[256, 128,64],

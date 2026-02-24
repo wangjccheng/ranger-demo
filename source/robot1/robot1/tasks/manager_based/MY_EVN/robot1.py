@@ -1,5 +1,72 @@
+import isaaclab.sim as sim_utils
+from isaaclab.actuators import ImplicitActuatorCfg
+from isaaclab.assets.articulation import ArticulationCfg
 
-
+ROBOT1_CFG = ArticulationCfg(
+    spawn=sim_utils.UsdFileCfg(
+        usd_path=f"/home/wjc/robot1/urdf/usd/urdf/urdf copy.usd", 
+        activate_contact_sensors=True,
+        rigid_props=sim_utils.RigidBodyPropertiesCfg(
+            disable_gravity=False,
+            retain_accelerations=False,
+            linear_damping=0.0,
+            angular_damping=0.0,
+            max_linear_velocity=1000.0,   # 把上限改小一点，避免离谱速度直接飞出边界
+            max_angular_velocity=1000.0,
+            max_depenetration_velocity=1000.0,
+        ),
+        articulation_props=sim_utils.ArticulationRootPropertiesCfg(
+            enabled_self_collisions=True, 
+            # 提升解算器迭代次数对 EHA 的稳定计算很有帮助
+            solver_position_iteration_count=8,  
+            solver_velocity_iteration_count=4
+        ),
+    ),
+    init_state=ArticulationCfg.InitialStateCfg(
+        pos=(0.0, 0.0, 0.75),
+        joint_pos={
+            "w_lb": 0.0,
+            "g_lf": 0.25,
+            "w_lf": 0.0,
+            "g_rf": 0.25,
+            "g_rb": 0.25,
+            "w_rf": 0.0,
+            "w_rb": 0.0,
+            "g_lb": 0.25,
+        },
+        joint_vel={".*": 0.0},
+    ),
+    
+    soft_joint_pos_limit_factor=0.95, 
+    
+    actuators={
+        "legs": ImplicitActuatorCfg(
+            joint_names_expr=[
+                "g_lb", "g_lf", "g_rf", "g_rb",
+            ],
+            # [关键修改] 模拟 EHA 液压缸推力换算的力矩上限
+            effort_limit=500.0,  
+            velocity_limit=50.0,
+            
+            # [关键修改] 模拟 EHA 的高刚度和阻尼，交由物理引擎底层隐式计算，避免爆炸
+            stiffness={".*": 2400.0}, 
+            damping={".*": 120.0},
+        ),
+        "wheels": ImplicitActuatorCfg(
+            joint_names_expr=[
+                "w_lb", "w_lf", "w_rf", "w_rb",
+            ],
+            # [关键修改] 模拟轮毂电机的峰值扭矩
+            effort_limit=100.0,  
+            velocity_limit=100.0,
+            
+            # [关键修改] 轮子仅做速度控制，因此位置刚度为0，仅保留阻尼(Kv)
+            stiffness={".*": 0.0},
+            damping={".*": 80.0},
+        ),
+    },
+)
+'''
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets.articulation import ArticulationCfg
@@ -75,7 +142,7 @@ ROBOT1_CFG = ArticulationCfg(
 )
 
 
-
+'''
 
 
 '''
