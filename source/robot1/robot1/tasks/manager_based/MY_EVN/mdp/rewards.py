@@ -109,7 +109,7 @@ def leg_pos_default_l2(env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot", 
     q = asset.data.joint_pos[:, asset_cfg.joint_ids]
     
     # 强制让它乖乖待在 0.25 附近，除非为了平衡不得不动
-    default_pos = 0.15 
+    default_pos = 0.25 
     return torch.sum((q - default_pos)**2, dim=1)
 # ---------------------------
 # 奖励配置（与动作/命令对齐）
@@ -125,12 +125,12 @@ class SkidSteerLegRewardsCfg:
     track_lin_vel_xy_exp = RewTerm(
         func=mdp.rewards.track_lin_vel_xy_exp,
         params={"command_name": "base_velocity", "std": 0.5},
-        weight=4.0,
+        weight=8.0,
     )
     track_ang_vel_z_exp = RewTerm(
         func=mdp.rewards.track_ang_vel_z_exp,
         params={"command_name": "base_velocity", "std": 0.5},
-        weight=4.0,
+        weight=5.0,
     )
 
     # 2) 车身稳定/抑制弹跳
@@ -144,13 +144,13 @@ class SkidSteerLegRewardsCfg:
     leg_speed_l2 = RewTerm(
         func=leg_vel_l2,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names="g_.*")},
-        weight=-0.1,  
+        weight=-0.01,  
     )
     
     leg_center_l2 = RewTerm(
         func=leg_pos_default_l2,  # 使用新函数
         params={"asset_cfg": SceneEntityCfg("robot", joint_names="g_.*")},
-        weight=-0.5,              # 权重给大一点，强迫它保持初始姿态
+        weight=-0.01,              # 权重给大一点，强迫它保持初始姿态
     )
     
     # [新增] 专门惩罚腿部动作的高频抖动 (Action Rate)
@@ -179,7 +179,7 @@ class SkidSteerLegRewardsCfg:
     contact_penalty = RewTerm(
         func=mdp.rewards.is_terminated_term,
         params={"term_keys": "base_contact"},
-        weight=-100.0,
+        weight=-1000.0,
     )
     
     feet_air_time = RewTerm(
@@ -191,7 +191,7 @@ class SkidSteerLegRewardsCfg:
             ),
             "max_air_time": 0.5,
         },
-        weight=-0.0010,
+        weight=-0.010,
     )
 
     log_pitch_monitor = RewTerm(

@@ -36,8 +36,8 @@ class SkidSteerLegAction(ActionTerm):
 
         # 3. 延迟模拟参数 (低通滤波器系数 alpha)
         # 数值越小，延迟越明显（阻尼越大）；1.0代表没有延迟
-        self.actuator_lag_alpha = getattr(cfg, "actuator_lag_alpha", 0.4) 
-        self.eha_lag_alpha      = getattr(cfg, "eha_lag_alpha", 0.2)
+        self.actuator_lag_alpha = getattr(cfg, "actuator_lag_alpha", 0.8) 
+        self.eha_lag_alpha      = getattr(cfg, "eha_lag_alpha", 0.6)
 
         # 4. 运行时缓存 (包含延迟历史)
         self._action_dim = 2 + len(self._leg_ids)
@@ -84,6 +84,7 @@ class SkidSteerLegAction(ActionTerm):
         self._prev_leg_pos_cmd[env_ids] = current_leg_positions[:, self._leg_ids]
 
     def process_actions(self, actions: torch.Tensor):
+        actions = actions.detach()
         self._raw_actions[:] = actions
         
         # 1. 解析底盘指令 (V, Omega)
@@ -116,8 +117,10 @@ class SkidSteerLegAction(ActionTerm):
 
         # 第二步：延迟模拟 (Low Pass Filter)
         # 模拟电机通讯延迟和 EHA 液压油建压的缓慢过程
-        wheel_vel_cmd = self.actuator_lag_alpha * wheel_vel_target + (1 - self.actuator_lag_alpha) * self._prev_wheel_vel_cmd
-        leg_pos_cmd   = self.eha_lag_alpha * leg_pos_target + (1 - self.eha_lag_alpha) * self._prev_leg_pos_cmd
+        wheel_vel_cmd = (self.actuator_lag_alpha * wheel_vel_target + 
+                         (1 - self.actuator_lag_alpha) * self._prev_wheel_vel_cmd).detach()
+        leg_pos_cmd   = (self.eha_lag_alpha * leg_pos_target + 
+                         (1 - self.eha_lag_alpha) * self._prev_leg_pos_cmd).detach()
         
         # 更新历史缓存
         self._prev_wheel_vel_cmd[:] = wheel_vel_cmd

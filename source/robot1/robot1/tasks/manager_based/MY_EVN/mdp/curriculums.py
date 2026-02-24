@@ -65,6 +65,8 @@ def anneal_reward_term_param(
     end_val: float,
     total_steps: int,
 ) -> torch.Tensor:
+    if env.common_step_counter % env.max_episode_length != 0:
+        return None
     current_step = env.common_step_counter
     if current_step >= total_steps:
         return
@@ -89,6 +91,8 @@ def anneal_reward_term_weight(
     end_weight: float,
     total_steps: int,
 ) -> None:
+    if env.common_step_counter % env.max_episode_length != 0:
+        return None
     current_step = env.common_step_counter
     
     if current_step >= total_steps:
