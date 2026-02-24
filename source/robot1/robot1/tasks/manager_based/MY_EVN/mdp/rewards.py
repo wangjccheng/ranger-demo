@@ -5,6 +5,157 @@ from isaaclab.utils import configclass
 from isaaclab.envs import ManagerBasedRLEnv
 from isaaclab.managers import RewardTermCfg as RewTerm, SceneEntityCfg
 
+# ==========================================
+# 自定义奖励项函数 (保留你的优秀设计，原封不动)
+# ==========================================
+
+def custom_leg_action_rate_l2(env: ManagerBasedRLEnv) -> torch.Tensor:
+    curr_action = env.action_manager.action[:, 2:]
+    prev_action = env.action_manager.prev_action[:, 2:]
+    return torch.sum(torch.square(curr_action - prev_action), dim=1)
+
+def leg_pos_center_l2(env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot", joint_names="g_.*")) -> torch.Tensor:
+    asset = env.scene[asset_cfg.name]
+    q   = asset.data.joint_pos[:, asset_cfg.joint_ids]                  
+    low = asset.data.soft_joint_pos_limits[:, asset_cfg.joint_ids, 0]
+    high= asset.data.soft_joint_pos_limits[:, asset_cfg.joint_ids, 1]
+    mid = 0.5 * (low + high)
+    half= torch.clamp(0.5 * (high - low), min=1e-6)
+    qn  = torch.clamp((q - mid) / half, -1.0, 1.0)
+    return torch.sum(qn**2, dim=1)
+
+def leg_vel_l2(env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot", joint_names="g_.*")) -> torch.Tensor:
+    return torch.sum(mdp.joint_vel(env, asset_cfg)**2, dim=1)
+
+def slip_consistency_l2(
+    env, wheel_cfg: SceneEntityCfg = SceneEntityCfg("robot", joint_names="w_.*"),
+    base_width: float = 0.5, wheel_radius: float = 0.05,
+) -> torch.Tensor:
+    v_b = mdp.base_lin_vel(env)[:, 0]     
+    w_b = mdp.base_ang_vel(env)[:, 2]     
+    w_all = mdp.joint_vel(env, wheel_cfg) 
+    n = w_all.shape[1] // 2
+    wl = torch.mean(w_all[:, :n], dim=1)  
+    wr = torch.mean(w_all[:, n:], dim=1)  
+    v_hat = wheel_radius * 0.5 * (wr + wl)
+    w_hat = wheel_radius / base_width * (wr - wl)
+    dv2 = (v_hat - v_b)**2
+    dw2 = (w_hat - w_b)**2
+    return dv2 + dw2
+
+def feet_air_time_l2(
+    env, sensor_cfg: SceneEntityCfg = SceneEntityCfg("contact_forces", body_names=["w_lf", "w_rf", "w_lb", "w_rb"]),
+    max_air_time: float = 0.1,
+) -> torch.Tensor:
+    sensor = env.scene[sensor_cfg.name]      
+    data = sensor.data                       
+    if data.current_air_time is None:
+        raise RuntimeError("contact_forces 传感器未开启 track_air_time=True")
+    foot_ids = sensor_cfg.body_ids           
+    air_time = data.current_air_time[:, foot_ids]
+    excess = torch.clamp(air_time - max_air_time, min=0.0)
+    return torch.sum(excess**2, dim=1)       
+
+def log_base_pitch(env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    rot = mdp.root_quat_w(env, asset_cfg)
+    _, pitch, _ = math_utils.euler_xyz_from_quat(rot)
+    return torch.abs(pitch)
+
+def flat_orientation_with_tolerance(
+    env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"), tolerance_deg: float = 2.0
+) -> torch.Tensor:
+    proj_grav = env.scene[asset_cfg.name].data.projected_gravity_b
+    grav_xy = proj_grav[:, :2]  
+    tilt_magnitude = torch.norm(grav_xy, dim=1) 
+    threshold = torch.sin(torch.tensor(tolerance_deg * 3.14159 / 180.0, device=env.device))
+    excess_tilt = torch.clamp(tilt_magnitude - threshold, min=0.0)
+    return excess_tilt ** 2
+
+def leg_pos_default_l2(env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot", joint_names="g_.*")) -> torch.Tensor:
+    asset = env.scene[asset_cfg.name]
+    q = asset.data.joint_pos[:, asset_cfg.joint_ids]
+    default_pos = 0.25 
+    return torch.sum((q - default_pos)**2, dim=1)
+
+
+# ==========================================
+# 奖励配置类 (结合存活奖励与课程学习基线)
+# ==========================================
+
+@configclass
+class SkidSteerLegRewardsCfg:
+    
+    # --- A. 核心存活与任务 (固定权重，不参与课程学习) ---
+    
+    # ★ 关键新增：破解自杀策略的“低保”
+    survival = RewTerm(func=mdp.is_alive, weight=2.0)
+    
+    # 接触惩罚降低到 -200，配合存活奖励足以让它害怕摔倒，又不会吓得原地不动
+    contact_penalty = RewTerm(
+        func=mdp.is_terminated_term,
+        params={"term_keys": "base_contact"},
+        weight=-200.0,
+    )
+    
+    track_lin_vel_xy_exp = RewTerm(
+        func=mdp.track_lin_vel_xy_exp,
+        params={"command_name": "base_velocity", "std": 0.5},
+        weight=5.0,
+    )
+    
+    track_ang_vel_z_exp = RewTerm(
+        func=mdp.track_ang_vel_z_exp,
+        params={"command_name": "base_velocity", "std": 0.5},
+        weight=5.0,
+    )
+
+    # --- B. 姿态与平滑正则 (初始权重极小，靠 Curriculum 放大) ---
+
+    flat_orientation_l2 = RewTerm(func=flat_orientation_with_tolerance, weight=-0.01) # 初始几乎不罚
+    ang_vel_xy_l2       = RewTerm(func=mdp.ang_vel_xy_l2,       weight=0.0)
+    lin_vel_z_l2        = RewTerm(func=mdp.lin_vel_z_l2,        weight=0.0)
+
+    # 增量控制下，腿部动作是速度。初始微小惩罚防止抽风
+    leg_action_rate_l2 = RewTerm(func=custom_leg_action_rate_l2, weight=-0.001)
+    
+    # 增量控制下，防止漂移到极限位置
+    leg_center_l2 = RewTerm(
+        func=leg_pos_center_l2,
+        params={"asset_cfg": SceneEntityCfg("robot", joint_names="g_.*")},
+        weight=-0.01,
+    )
+    
+    # 你的自定义打滑惩罚
+    slip_consistency = RewTerm(
+        func=slip_consistency_l2,
+        params={"wheel_cfg": SceneEntityCfg("robot", joint_names="w_.*"), "base_width": 0.5, "wheel_radius": 0.05},
+        weight=0.0,
+    )
+
+    # 足端离地时间
+    feet_air_time = RewTerm(
+        func=feet_air_time_l2,
+        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=["w_lf", "w_rf", "w_lb", "w_rb"]), "max_air_time": 0.5},
+        weight=-0.001,
+    )
+
+    # 底层物理扭矩/加速度惩罚
+    dof_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=0.0)
+    dof_acc_l2     = RewTerm(func=mdp.joint_acc_l2,     weight=0.0)
+
+    # 监控项 (不参与梯度)
+    log_pitch_monitor = RewTerm(func=log_base_pitch, weight=0.0)
+
+
+
+'''
+import torch
+import isaaclab.envs.mdp as mdp
+import isaaclab.utils.math as math_utils
+from isaaclab.utils import configclass
+from isaaclab.envs import ManagerBasedRLEnv
+from isaaclab.managers import RewardTermCfg as RewTerm, SceneEntityCfg
+
 # ---------------------------
 # 自定义奖励项（与动作对齐）
 # ---------------------------
@@ -198,7 +349,7 @@ class SkidSteerLegRewardsCfg:
         func=log_base_pitch,
         weight=-0.0000573,
     )
-
+'''
 
 
 

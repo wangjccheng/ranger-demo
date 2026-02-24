@@ -1,3 +1,148 @@
+
+from __future__ import annotations
+import torch
+from isaaclab.assets import Articulation
+from isaaclab.managers import ActionTerm
+import isaaclab.utils.math as math_utils
+
+class SkidSteerLegAction(ActionTerm):
+    """
+    Sim2Real 增强版动作项:
+    - 轮毂电机: 速度控制
+    - EHA 腿部: ★增量位置控制 (Delta Position Control)★ + 低通滤波
+    """
+    
+    def __init__(self, cfg, env):
+        super().__init__(cfg, env)
+        self._asset: Articulation = env.scene[cfg.asset_name]
+
+        # 1. 获取关节索引 (保序)
+        self._left_ids, _  = self._asset.find_joints(cfg.left_wheel_joint_names,  preserve_order=True)
+        self._right_ids, _ = self._asset.find_joints(cfg.right_wheel_joint_names, preserve_order=True)
+        self._leg_ids, _   = self._asset.find_joints(cfg.leg_joint_names, preserve_order=True)
+        self._all_wheel_ids = list(self._left_ids) + list(self._right_ids)
+
+        if len(self._all_wheel_ids) == 0 or len(self._leg_ids) == 0:
+            raise ValueError("未找到轮子或腿部关节，请检查配置。")
+
+        # 2. 几何与映射参数
+        self.W = float(cfg.base_width)
+        self.r = float(cfg.wheel_radius)
+        self._base_scale = torch.tensor(cfg.base_scale, device=self.device).view(1, 2)
+        self._base_offset = torch.tensor(cfg.base_offset, device=self.device).view(1, 2)
+        self._leg_scale = float(cfg.leg_scale)
+        self._leg_offset = float(cfg.leg_offset)
+        self._bounding_strategy = getattr(cfg, "bounding_strategy", "clip")
+        self._no_reverse = bool(getattr(cfg, "no_reverse", False))
+
+        # 3. 延迟模拟参数 (低通滤波器系数 alpha)
+        self.actuator_lag_alpha = getattr(cfg, "actuator_lag_alpha", 0.8) 
+        self.eha_lag_alpha      = getattr(cfg, "eha_lag_alpha", 0.4)
+
+        # 4. 运行时缓存 (包含延迟历史)
+        self._action_dim = 2 + len(self._leg_ids)
+        self._raw_actions = torch.zeros(self.num_envs, self._action_dim, device=self.device)
+        self._processed_actions = torch.zeros_like(self._raw_actions)
+        
+        # 记录上一帧的指令，用于计算增量累加与低通滤波
+        self._prev_wheel_vel_cmd = torch.zeros(self.num_envs, len(self._all_wheel_ids), device=self.device)
+        self._prev_leg_pos_cmd   = torch.zeros(self.num_envs, len(self._leg_ids), device=self.device)
+
+    @property
+    def action_dim(self) -> int:
+        return self._action_dim
+
+    @property
+    def raw_actions(self) -> torch.Tensor:
+        return self._raw_actions
+
+    @property
+    def processed_actions(self) -> torch.Tensor:
+        return self._processed_actions
+
+    def _bound_base_cmd(self, cmd: torch.Tensor) -> torch.Tensor:
+        if self._bounding_strategy == "clip":
+            return torch.clamp(cmd, -1.0, 1.0)
+        elif self._bounding_strategy == "tanh":
+            return torch.tanh(cmd)
+        return cmd
+
+    def reset(self, env_ids: torch.Tensor | None = None) -> None:
+        """
+        环境重置时，必须将历史位置对齐到物理引擎的当前真实位置
+        """
+        if env_ids is None:
+            env_ids = slice(None)
+            
+        self._prev_wheel_vel_cmd[env_ids] = 0.0
+        
+        # ★ 这里极其重要：重置时，把增量基准点重置为机器人的当前真实姿态
+        current_leg_positions = self._asset.data.joint_pos[env_ids]
+        self._prev_leg_pos_cmd[env_ids] = current_leg_positions[:, self._leg_ids]
+
+    def process_actions(self, actions: torch.Tensor):
+        actions = actions.detach()
+        self._raw_actions[:] = actions
+        
+        # 1. 解析底盘指令 (V, Omega)
+        base_raw = actions[:, :2]
+        base_cmd = base_raw * self._base_scale + self._base_offset
+        base_cmd = self._bound_base_cmd(base_cmd)
+        if self._no_reverse:
+            base_cmd[:, 0] = torch.clamp(base_cmd[:, 0], min=0.0)
+
+        # ==========================================
+        # 2. 解析腿部指令 (★ 增量/Delta 控制逻辑 ★)
+        # ==========================================
+        leg_raw = actions[:, 2:]
+        
+        # 计算单步增量 (Delta Position)
+        delta_pos = leg_raw * self._leg_scale + self._leg_offset
+        
+        # 目标位置 = 上一帧的目标位置 + 本次增量
+        leg_cmd = self._prev_leg_pos_cmd + delta_pos
+        
+        # 提取底层 URDF 的软限位 (防止增量无限累加导致关节折断)
+        low_limit = self._asset.data.soft_joint_pos_limits[:, self._leg_ids, 0]
+        high_limit = self._asset.data.soft_joint_pos_limits[:, self._leg_ids, 1]
+        
+        # 严格截断
+        leg_cmd = torch.clamp(leg_cmd, low_limit, high_limit)
+
+        self._processed_actions[:, :2] = base_cmd
+        self._processed_actions[:, 2:] = leg_cmd
+
+    def apply_actions(self):
+        """
+        物理执行层：隐式控制与低通延迟
+        """
+        v, omega = self._processed_actions[:, 0], self._processed_actions[:, 1]
+        
+        wl = (v - omega * (self.W / 2.0)) / self.r
+        wr = (v + omega * (self.W / 2.0)) / self.r
+        nL, nR = len(self._left_ids), len(self._right_ids)
+        wheel_vel_target = torch.cat([wl.view(-1, 1).expand(-1, nL), wr.view(-1, 1).expand(-1, nR)], dim=1)
+        
+        # 此时的 leg_pos_target 已经是经过安全截断的绝对位置了
+        leg_pos_target = self._processed_actions[:, 2:]
+
+        # 第二步：延迟模拟 (Low Pass Filter)
+        wheel_vel_cmd = (self.actuator_lag_alpha * wheel_vel_target + 
+                         (1 - self.actuator_lag_alpha) * self._prev_wheel_vel_cmd).detach()
+                         
+        leg_pos_cmd   = (self.eha_lag_alpha * leg_pos_target + 
+                         (1 - self.eha_lag_alpha) * self._prev_leg_pos_cmd).detach()
+        
+        # 更新历史缓存 (提供给下一帧作为 Delta 的基准点)
+        self._prev_wheel_vel_cmd[:] = wheel_vel_cmd
+        self._prev_leg_pos_cmd[:]   = leg_pos_cmd
+
+        # 第三步：下发给物理引擎
+        self._asset.set_joint_velocity_target(wheel_vel_cmd, joint_ids=self._all_wheel_ids)
+        self._asset.set_joint_position_target(leg_pos_cmd, joint_ids=self._leg_ids)
+
+
+'''
 from __future__ import annotations
 import torch
 from isaaclab.assets import Articulation
@@ -135,7 +280,7 @@ class SkidSteerLegAction(ActionTerm):
         # 腿部：使用底层的位置控制
         # 底层会在刚体配置中根据刚度(stiffness)、阻尼(damping)自动计算出非常稳定的弹簧推力，并截断在 effort_limit 内
         self._asset.set_joint_position_target(leg_pos_cmd, joint_ids=self._leg_ids)
-
+'''
 
 '''
 from __future__ import annotations

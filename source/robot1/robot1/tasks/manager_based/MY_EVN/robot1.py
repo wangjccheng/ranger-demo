@@ -46,7 +46,7 @@ ROBOT1_CFG = ArticulationCfg(
             ],
             # [关键修改] 模拟 EHA 液压缸推力换算的力矩上限
             effort_limit=500.0,  
-            velocity_limit=50.0,
+            velocity_limit=3.0,
             
             # [关键修改] 模拟 EHA 的高刚度和阻尼，交由物理引擎底层隐式计算，避免爆炸
             stiffness={".*": 2400.0}, 
@@ -57,12 +57,12 @@ ROBOT1_CFG = ArticulationCfg(
                 "w_lb", "w_lf", "w_rf", "w_rb",
             ],
             # [关键修改] 模拟轮毂电机的峰值扭矩
-            effort_limit=100.0,  
-            velocity_limit=100.0,
+            effort_limit=1000.0,  
+            velocity_limit=1000.0,
             
             # [关键修改] 轮子仅做速度控制，因此位置刚度为0，仅保留阻尼(Kv)
             stiffness={".*": 0.0},
-            damping={".*": 80.0},
+            damping={".*": 2000.0},
         ),
     },
 )

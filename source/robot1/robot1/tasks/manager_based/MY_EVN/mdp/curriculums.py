@@ -112,7 +112,118 @@ def anneal_reward_term_weight(
     
     return None        
         
+# (此处省略文件顶部的 import 和你原有的 terrain_levels_vel, 
+# increase_reward_weight_over_time, anneal_reward_term_param, 
+# anneal_reward_term_weight 等基础函数定义。直接保留你原来的即可，非常标准。)
 
+# ... (保留你的基础函数定义) ...
+
+@configclass
+class SkidSteerLegCurriculumCfg:
+    """课程学习配置：从允许“野蛮生长”平滑过渡到“优雅运动”"""
+    
+    # 1. 速度跟踪要求逐渐严苛
+    anneal_lin_vel_std = CurrTerm(
+        func=anneal_reward_term_param,
+        params={
+            "term_name": "track_lin_vel_xy_exp", 
+            "param_name": "std",
+            "start_val": 0.5,           # 初始：允许较大的速度误差
+            "end_val": 0.2,             # 最终：要求极高精度的速度跟踪
+            "total_steps": 1.0e5,       # 在训练进行到一半左右收紧完毕
+        },
+    )
+    
+    anneal_ang_vel_std = CurrTerm(
+        func=anneal_reward_term_param,
+        params={
+            "term_name": "track_ang_vel_z_exp",
+            "param_name": "std",
+            "start_val": 0.5,
+            "end_val": 0.2, 
+            "total_steps": 1.0e5,
+        },
+    )
+    
+    # 2. 姿态惩罚逐渐加重 (逼迫车身水平)
+    anneal_flat_orientation_penalty = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "flat_orientation_l2",  
+            "start_weight": -0.01,               # 初期：轻微惩罚，活下来最重要
+            "end_weight": -2.0,                  # 后期：强迫它收敛到水平姿态
+            "total_steps": 1.5e5,                
+        },
+    )
+
+    # 3. 抑制弹跳与摇晃
+    anneal_bounce_penalty = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "lin_vel_z_l2",     
+            "start_weight": 0.0,
+            "end_weight": -0.5,
+            "total_steps": 1.5e5,
+        },
+    )
+
+    anneal_tilt_penalty = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "ang_vel_xy_l2",    
+            "start_weight": 0.0,
+            "end_weight": -0.5,
+            "total_steps": 1.5e5,
+        },
+    )
+
+    # 4. Sim2Real 高阶约束：打滑与抖动
+    anneal_slip_penalty = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "slip_consistency", 
+            "start_weight": 0.0,             
+            "end_weight": -0.05,            # 后期强迫轮子转速与底盘真实速度匹配
+            "total_steps": 1.8e5,            
+        },
+    )
+    
+    # 专门针对 Delta 控制的平滑度压榨
+    anneal_leg_action_rate_penalty = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "leg_action_rate_l2", 
+            "start_weight": -0.001,             
+            "end_weight": -0.05,            # 后期强迫网络输出极致平滑的增量指令
+            "total_steps": 1.8e5,            
+        },
+    )
+    
+    # 保护实车电机的扭矩惩罚
+    dof_torques_penalty = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "dof_torques_l2",    
+            "start_weight": 0.0,
+            "end_weight": -1.0e-6,
+            "total_steps": 1.8e5,
+        },
+    )
+    
+    anneal_dof_acc_penalty = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "dof_acc_l2",       # 对应 rewards.py 里的名字
+            "start_weight": 0.0,             # 前期完全不罚，鼓励大胆探索
+            "end_weight": -2.5e-7,           # 后期(终值)：你原版的经典数值
+            "total_steps": 1.8e5,            # 在快要训练结束时收紧到极值
+        },
+    )
+    
+    terrain_levels = CurrTerm(func=terrain_levels_vel)
+
+
+'''
 @configclass
 class SkidSteerLegCurriculumCfg:
     """课程学习配置：随着训练动态调整环境难度"""
@@ -183,7 +294,7 @@ class SkidSteerLegCurriculumCfg:
     )
 
     terrain_levels = CurrTerm(func=terrain_levels_vel)
-
+'''
 
 
 
