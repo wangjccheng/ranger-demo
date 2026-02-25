@@ -58,6 +58,19 @@ class SkidSteerLegAction(ActionTerm):
         self._raw_actions = torch.zeros(self.num_envs, self._action_dim, device=self.device)
         self._processed_actions = torch.zeros_like(self._raw_actions)
 
+        # +++ 【新增 1：初始化低通滤波器缓存】 +++
+        self._action_alpha = getattr(cfg, "action_alpha", 1.0)
+        self._prev_wheel_speeds = torch.zeros(self.num_envs, len(self._left_ids) + len(self._right_ids), device=self.device)
+        self._prev_leg_vels = torch.zeros(self.num_envs, self._n_leg, device=self.device)
+    
+    # +++ 【新增 2：极其关键的防坑重置】 +++
+    # 如果不写这个，机器人在摔倒重置后，会继承上一个回合死亡前的疯狂速度，导致“幽灵冲刺”
+    def reset(self, env_ids: torch.Tensor | None = None) -> None:
+        if env_ids is None:
+            env_ids = slice(None)
+        self._prev_wheel_speeds[env_ids] = 0.0
+        self._prev_leg_vels[env_ids] = 0.0
+    
     @property
     def action_dim(self) -> int:
         return self._action_dim
@@ -146,20 +159,24 @@ class SkidSteerLegAction(ActionTerm):
         wheel_speeds = torch.zeros(self.num_envs, nL + nR, device=self.device)
         wheel_speeds[:, :nL] = wl.view(-1, 1).expand(-1, nL)
         wheel_speeds[:, nL:] = wr.view(-1, 1).expand(-1, nR)
-
-        # 下发到轮子（速度控制）
+        # 轮子：执行纯速度控制
         all_wheel_ids = list(self._left_ids) + list(self._right_ids)
         self._asset.set_joint_velocity_target(wheel_speeds, joint_ids=all_wheel_ids)
-# ---------------- 修改开始 ----------------
-        # 调距目标（速度控制）
-        # 注意：这里我们把 leg_targets 当作速度指令
-        leg_vel_targets = self._processed_actions[:, 2:]  # [N,M]
+# ==========================================
+        # 2. 腿部：执行“低通滤波位置控制” (完美模拟液压)
+        # ==========================================
+        # 网络解析出的期望绝对位置
+        leg_pos_targets = self._processed_actions[:, 2:]  
         
-        # ★ 关键修改：使用 set_joint_velocity_target
-        # 同时，为了防止物理引擎残留位置目标，建议将位置目标设为 None (Isaac Lab底层通常会自动处理)
-        # 但显式调用 set_joint_velocity_target 是必须的。
-        self._asset.set_joint_velocity_target(leg_vel_targets, joint_ids=self._leg_ids)
-        # ---------------- 修改结束 ----------------
-        # 调距目标（位置控制）
-        #leg_targets = self._processed_actions[:, 2:]  # [N,M]
-        #self._asset.set_joint_position_target(leg_targets, joint_ids=self._leg_ids)
+        # 获取液压缸“当前的真实物理位置”作为基准
+        current_leg_pos = self._asset.data.joint_pos[:, self._leg_ids]
+
+        # ★ 核心公式：液压建压延迟模拟
+        # 物理引擎下一帧的目标位置 = 真实当前位置 + (期望位置 - 真实当前位置) * alpha
+        # alpha 取 0.05 ~ 0.1 左右。
+        # 这意味着：即便网络瞬间要求腿伸长 10cm，实际下发的指令也只会在当前位置基础上前进 0.5cm。
+        
+        smoothed_leg_pos = current_leg_pos + (leg_pos_targets - current_leg_pos) * self._action_alpha
+        
+        # 下发平滑后的【位置目标】给物理引擎
+        self._asset.set_joint_position_target(smoothed_leg_pos, joint_ids=self._leg_ids)

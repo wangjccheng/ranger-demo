@@ -112,7 +112,7 @@ class MySceneCfg(InteractiveSceneCfg):
         offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
         ray_alignment="yaw",
         pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[2.0, 2.0]),
-        debug_vis=True,
+        debug_vis=False,
         mesh_prim_paths=["/World/ground"],
     )
     
@@ -143,7 +143,7 @@ class CommandsCfg:
         rel_heading_envs=0.5,
         heading_command=True,
         heading_control_stiffness=1.0,
-        debug_vis=False,
+        debug_vis=True,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
             lin_vel_x=(-1.0, 1.0), lin_vel_y=(0, 0), ang_vel_z=(-0.8, 0.8), heading=(-math.pi, math.pi)
         ),
