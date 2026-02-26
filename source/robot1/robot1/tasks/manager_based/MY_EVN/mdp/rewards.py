@@ -206,3 +206,6 @@ class SkidSteerLegRewardsCfg:
         func=log_base_pitch, # 指向上面定义的函数
         weight=-0.000573,                      # 权重为 0，不影响训练
     )
+    
+    
+    #可以通过观察机器人训练过程中的奖励数量级来分析权重值是否合理

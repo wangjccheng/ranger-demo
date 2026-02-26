@@ -23,7 +23,7 @@ class SkidSteerLegEventsCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=["base_link"]),
-            "mass_distribution_params": (-1.0, 2.0),  # 加法扰动
+            "mass_distribution_params": (-20.0, 20.0),  # 加法扰动
             "operation": "add",
             "distribution": "uniform",
             "recompute_inertia": True,
@@ -34,7 +34,7 @@ class SkidSteerLegEventsCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=["base_link"]),
-            "com_range": {"x": (-0.02, 0.02), "y": (-0.02, 0.02), "z": (-0.01, 0.01)},
+            "com_range": {"x": (-0.08, 0.08), "y": (-0.08, 0.08), "z": (-0.04, 0.04)},
         },
     )
     leg_actuator_gains = EventTerm(
@@ -42,6 +42,17 @@ class SkidSteerLegEventsCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", joint_names="g_.*"),
+            "stiffness_distribution_params": (0.8, 1.2),
+            "damping_distribution_params": (0.8, 1.2),
+            "operation": "scale",
+            "distribution": "uniform",
+        },
+    )   
+    leg_actuator_gains = EventTerm(
+        func=mdp.randomize_actuator_gains,  # 电机增益扰动（调速关节）[2]
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", joint_names="w_.*"),
             "stiffness_distribution_params": (0.8, 1.2),
             "damping_distribution_params": (0.8, 1.2),
             "operation": "scale",
@@ -60,6 +71,18 @@ class SkidSteerLegEventsCfg:
         },
     )
 
+    # 6. 【新增】轮毂电机物理参数扰动：模拟电气响应的细微差别和轮轴阻力
+    wheel_joint_params = EventTerm(
+        func=mdp.randomize_joint_parameters,
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", joint_names="w_.*"),
+            "friction_distribution_params": (0.0, 0.02),
+            "armature_distribution_params": (0.9, 1.1),
+            "operation": "scale",
+            "distribution": "uniform",
+        },
+    )
     # ---------- reset：每回合重置 ----------
     reset_base = EventTerm(
         func=mdp.reset_root_state_uniform,  # 根位姿/速度随机 [2]
@@ -82,7 +105,7 @@ class SkidSteerLegEventsCfg:
         mode="reset",
         params={
             "asset_cfg": SceneEntityCfg("robot", joint_names="g_.*"),
-            "position_range": (-0.05, 0.05),
+            "position_range": (-0.08, 0.08),
             "velocity_range": (-0.0, 0.0),
         },
     )
@@ -106,11 +129,16 @@ class SkidSteerLegEventsCfg:
     )
 
     # ---------- interval：周期扰动 ----------
+    # 7. 周期性外力冲击：使用施加真实外力/力矩代替瞬间改写速度，保护 GRU 状态连续性，力的大小匹配大自重车身
+
+    
+    
+
     push_robot = EventTerm(
         func=mdp.push_by_setting_velocity,  # 速度脉冲（比力更简洁稳定）[2]
         mode="interval",
-        interval_range_s=(8.0, 12.0),      # 每 8–12 s 触发一次（每个 env 独立计时）[18]
-        params={"velocity_range": {"x": (-0.6, 0.6), "y": (-0.4, 0.4), "yaw": (-0.5, 0.5)}},
+        interval_range_s=(8.0, 15.0),      # 每 8–12 s 触发一次（每个 env 独立计时）[18]
+        params={"velocity_range": {"x": (-0.3, 0.3), "y": (-0.3, 0.3), "yaw": (-0.3, 0.3)}},
     )
 
     # 可选：全局重力轻微随机化（不分 env；建议仅在鲁棒性实验中打开）[2]

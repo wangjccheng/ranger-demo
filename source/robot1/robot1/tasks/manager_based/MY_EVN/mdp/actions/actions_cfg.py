@@ -34,6 +34,9 @@ class SkidSteerLegActionCfg(ActionTermCfg):
     # +++ 【新增】: 低通滤波系数 (模拟响应延迟) +++
     # alpha 范围 (0, 1]。1.0 代表理想执行器(无延迟)，数值越小延迟/惯性越大
     action_alpha: float = 0.3
+    
+    delay_steps_min: int = 1
+    delay_steps_max: int = 3
 
 @configclass
 class ActionsCfg:

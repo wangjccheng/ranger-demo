@@ -10,7 +10,7 @@ from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, R
 @configclass
 class PPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 128
-    max_iterations = 2000
+    max_iterations = 3000
     save_interval = 500  # 建议改大一点，解决硬盘占用问题
     experiment_name = "youxia_manager"
     empirical_normalization = True

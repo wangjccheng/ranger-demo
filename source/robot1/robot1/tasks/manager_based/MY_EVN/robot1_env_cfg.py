@@ -178,7 +178,7 @@ class ROBOT1RoughEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the locomotion velocity-tracking environment."""
 
     # Scene settings
-    scene: MySceneCfg = MySceneCfg(num_envs=1024, env_spacing=2.5)
+    scene: MySceneCfg = MySceneCfg(num_envs=512, env_spacing=2.5)
     # Basic settings
     observations: SkidSteerLegObsCfg = SkidSteerLegObsCfg()
     actions: ActionsCfg = ActionsCfg()
@@ -196,14 +196,14 @@ class ROBOT1RoughEnvCfg(ManagerBasedRLEnvCfg):
     def __post_init__(self):
         """Post initialization."""
         # general settings
-        self.decimation = 5
-        self.episode_length_s = 80.0
+        self.decimation = 10
+        self.episode_length_s = 40.0
         # simulation settings
         
         self.viewer.eye = (-40.0, 0.0, 6.0)       # 相机放高、放远一点
         self.viewer.look_at = (-1.0, 0.0, -1.0)   # 看向机器人附近
         
-        self.sim.dt = 0.01
+        self.sim.dt = 0.002
         self.sim.render_interval = self.decimation
         self.sim.physics_material = self.scene.terrain.physics_material
         self.sim.physx.gpu_max_rigid_patch_count = 10 * 2**15
