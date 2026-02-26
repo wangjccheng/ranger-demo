@@ -186,7 +186,7 @@ class SkidSteerLegRewardsCfg:
     contact_penalty = RewTerm(
         func=mdp.rewards.is_terminated_term,
         params={"term_keys": "base_contact"},
-        weight=-10.0,
+        weight=-0.5,
     )
     
     # 新增: 足端离地惩罚

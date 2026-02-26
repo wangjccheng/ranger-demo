@@ -107,33 +107,35 @@ class SkidSteerLegAction(ActionTerm):
         )
 
     def process_actions(self, actions: torch.Tensor):
-        # 确保动作与梯度图断开
         actions = actions.detach()
         self._raw_actions[:] = actions
         
         # ==========================================================
-        # 【极致优化】使用 torch.roll 替代切片 clone，避免显存碎片累积
-        # dims=0 表示在时间维度上滚动，shifts=1 表示全体向右推一格（最旧的被挤到索引0）
-        # 然后我们直接覆盖索引0，实现完美的零分配环形队列
+        # [新增核心] 拦截动作，送入延迟队列
         # ==========================================================
-        self._action_history = torch.roll(self._action_history, shifts=1, dims=0)
-        self._action_history[0] = actions
+        # 1. 队列全体往后挪一格 (丢弃最旧的)
+        self._action_history[1:] = self._action_history[:-1].clone()
+        # 2. 最新动作放队头
+        self._action_history[0] = actions.clone()
 
-        # 提取延迟动作
+        # 3. 根据每个 env 自己的延迟设定，提取对应的滞后动作
         delayed_actions = torch.gather(
             self._action_history, 
             dim=0, 
             index=self._current_delays.view(1, self.num_envs, 1).expand(1, self.num_envs, self.action_dim)
         ).squeeze(0)
 
-        # 解析底盘指令 (V, Omega)
+        # ==========================================================
+        # 解析指令 (使用 delayed_actions 替代原来的 actions)
+        # ==========================================================
+        # 1. 解析底盘指令 (V, Omega)
         base_raw = delayed_actions[:, :2]
         base_cmd = base_raw * self._base_scale + self._base_offset
         base_cmd = self._bound_base_cmd(base_cmd)
         if self._no_reverse:
             base_cmd[:, 0] = torch.clamp(base_cmd[:, 0], min=0.0)
 
-        # 解析腿部指令 (解析为期望到达的目标位置 Position)
+        # 2. 解析腿部指令 (解析为期望到达的目标位置 Position)
         leg_raw = delayed_actions[:, 2:]
         leg_cmd = leg_raw * self._leg_scale + self._leg_offset
 
