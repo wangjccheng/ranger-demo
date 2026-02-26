@@ -22,8 +22,8 @@ class PPORunnerCfg(RslRlOnPolicyRunnerCfg):
         
         init_noise_std=0.5,
         # MLP 部分：处理特征提取 (处理 CNN 潜变量和本体感知的拼接)
-        actor_hidden_dims=[256, 128,64],
-        critic_hidden_dims=[256, 128,64],
+        actor_hidden_dims=[128,64,32],
+        critic_hidden_dims=[128,64,32],
         activation="elu",
         
         # ★ 2. RNN 部分：切换为 GRU
@@ -37,7 +37,7 @@ class PPORunnerCfg(RslRlOnPolicyRunnerCfg):
         clip_param=0.2,
         entropy_coef=0.01,
         num_learning_epochs=5,
-        num_mini_batches=2,
+        num_mini_batches=8,
         learning_rate=5.0e-5,
         schedule="adaptive",
         gamma=0.99,

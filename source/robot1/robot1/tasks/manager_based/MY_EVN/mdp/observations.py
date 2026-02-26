@@ -154,7 +154,9 @@ class SkidSteerLegObsCfg:
         height_scan = ObsTerm(
             func=masked_height_scan,
             params={"sensor_cfg": SceneEntityCfg("height_scanner"), "mask_region": "front"},
-            clip=(-2.0, 2.0)
+            clip=(-2.0, 2.0),
+            noise=Gnoise(std=0.025),  # 适度噪声，增强鲁棒性
+            
         )
 
         def __post_init__(self):

@@ -186,7 +186,7 @@ class SkidSteerLegRewardsCfg:
     contact_penalty = RewTerm(
         func=mdp.rewards.is_terminated_term,
         params={"term_keys": "base_contact"},
-        weight=-1.0,
+        weight=-10.0,
     )
     
     # 新增: 足端离地惩罚
@@ -199,7 +199,7 @@ class SkidSteerLegRewardsCfg:
             ),
             "max_air_time": 0.5,
         },
-        weight=-0.0010,   # 先给一个比较温和的权重，后面看效果再调
+        weight=-0.010,   # 先给一个比较温和的权重，后面看效果再调
     )
 
     log_pitch_monitor = RewTerm(
