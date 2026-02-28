@@ -124,3 +124,11 @@ python scripts/zero_agent.py --task <TASK_NAME>
 ---
 
 **Note**: 本项目是基于 Isaac Lab 模板开发的扩展库。详细文档请参考 [Isaac Lab Documentation](https://isaac-sim.github.io/IsaacLab/).
+
+
+python scripts/rsl_rl/sim2sim.py
+python scripts/rsl_rl/export_gru_cnn_jit.py --task sk-Robot1-v0 --load_run 2026-02-26_18-12-48 --checkpoint model_1000.pt --export_path /home/wjc/robot1/jit_models/policy_lstm_2.pt
+watch -n 1 nvidia-smi
+python scripts/rsl_rl/train.py     --task sk-Robot1-v0     --logger wandb     --log_project_name robot1-rough  --video --headless
+
+python scripts/rsl_rl/play_keyboard.py     --task sk-Robot1-v0     --load_run 2026-01-29_17-24-08 --checkpoint model_3499.pt

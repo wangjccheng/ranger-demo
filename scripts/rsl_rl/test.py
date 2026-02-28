@@ -25,7 +25,7 @@ def main():
     # slip_feat(6) + last_action(8) = 41 维
     # 高度扫描 (height_scan): GridPatternCfg 2m x 2m, res=0.1 -> 20x20 = 400 维
     # 假设总维度为 441，请将此数字替换为你代码报错时提示的真实 Observation 维度！
-    num_obs = 480  
+    num_obs = 471  
     
     # LSTM 配置 (与你在 rsl_rl_ppo_cfg.py 中的配置对齐)
     rnn_hidden_dim = 128

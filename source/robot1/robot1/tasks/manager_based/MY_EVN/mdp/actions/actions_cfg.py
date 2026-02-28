@@ -22,14 +22,14 @@ class SkidSteerLegActionCfg(ActionTermCfg):
     leg_joint_names: list[str] | str = MISSING
 
     # 底盘标定/约束
-    base_scale: tuple[float, float] = (5.0, 3.0)  # 分别为 v 与 omega 的缩放
+    base_scale: tuple[float, float] = (1.0, 0.5)  # 分别为 v 与 omega 的缩放
     base_offset: tuple[float, float] = (0.0, 0.0)
     bounding_strategy: str | None = "clip"       # "clip"/"tanh"/None
     no_reverse: bool = False                     # True 则 v>=0
 
     # 调距关节映射：二选一
-    leg_rescale_to_limits: bool = True           # True 时用软限把 [-1,1] 反归一化到实际范围
-    leg_scale: float = 1.0                       # False 时，线性映射的缩放
+    leg_rescale_to_limits: bool = False           # True 时用软限把 [-1,1] 反归一化到实际范围
+    leg_scale: float = 0.25                      # False 时，线性映射的缩放
     leg_offset: float = 0.0                      # False 时，线性映射的偏置
     # +++ 【新增】: 低通滤波系数 (模拟响应延迟) +++
     # alpha 范围 (0, 1]。1.0 代表理想执行器(无延迟)，数值越小延迟/惯性越大

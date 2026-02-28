@@ -136,7 +136,7 @@ class SkidSteerLegRewardsCfg:
     track_lin_vel_xy_exp = RewTerm(
         func=mdp.rewards.track_lin_vel_xy_exp,
         params={"command_name": "base_velocity", "std": 0.5},  # std 越小，偏差罚得越快
-        weight=3.0,
+        weight=4.0,
     )
     track_ang_vel_z_exp = RewTerm(
         func=mdp.rewards.track_ang_vel_z_exp,
@@ -145,7 +145,7 @@ class SkidSteerLegRewardsCfg:
     )
 
     # 2) 车身稳定/抑制弹跳 [4]
-    flat_orientation_l2 = RewTerm(func=flat_orientation_with_tolerance, weight=-2.0)
+    flat_orientation_l2 = RewTerm(func=flat_orientation_with_tolerance, weight=-1.0)
     ang_vel_xy_l2       = RewTerm(func=mdp.rewards.ang_vel_xy_l2,       weight=0)
     lin_vel_z_l2        = RewTerm(func=mdp.rewards.lin_vel_z_l2,        weight=0)
 
@@ -174,8 +174,8 @@ class SkidSteerLegRewardsCfg:
 
     # 5) 能耗与控制平滑 [4]
     dof_torques_l2 = RewTerm(func=mdp.rewards.joint_torques_l2, weight=0)
-    dof_acc_l2     = RewTerm(func=mdp.rewards.joint_acc_l2,     weight=-2.5e-7)
-    action_rate_l2 = RewTerm(func=mdp.rewards.action_rate_l2,   weight=-0.050)
+    dof_acc_l2     = RewTerm(func=mdp.rewards.joint_acc_l2,     weight=-5e-7)
+    action_rate_l2 = RewTerm(func=mdp.rewards.action_rate_l2,   weight=-0.00005)
 
     # 6) 可选：卡住终止的惩罚（依赖 TerminationManager 的 "stuck" 条目）[4][5]
     #stuck_penalty = RewTerm(
@@ -199,7 +199,7 @@ class SkidSteerLegRewardsCfg:
             ),
             "max_air_time": 0.5,
         },
-        weight=-0.010,   # 先给一个比较温和的权重，后面看效果再调
+        weight=-0.030,   # 先给一个比较温和的权重，后面看效果再调
     )
 
     log_pitch_monitor = RewTerm(

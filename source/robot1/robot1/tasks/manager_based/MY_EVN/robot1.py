@@ -23,7 +23,7 @@ ROBOT1_CFG = ArticulationCfg(
     ),
     init_state=ArticulationCfg.InitialStateCfg(
   
-        pos=(0.0, 0.0, 0.8), # 机器人初始位置，具体高度可由脚本check_op3.py查看
+        pos=(0.0, 0.0, 0.75), # 机器人初始位置，具体高度可由脚本check_op3.py查看
 
         # 机器人各关节初始角度，这里对应urdf中的joint,所有可动的joint都需要写进来
 
@@ -53,7 +53,7 @@ ROBOT1_CFG = ArticulationCfg(
             "g_rb",
             ],
             effort_limit_sim=500,
-            velocity_limit_sim=5.0,
+            velocity_limit_sim=2.0,
             stiffness={
             "g_lb": 2400,
             "g_lf": 2400,
@@ -78,7 +78,7 @@ ROBOT1_CFG = ArticulationCfg(
             ],
             #saturation_effort=1000.0,
             effort_limit=500,
-            velocity_limit=500.0,
+            velocity_limit=30.0,
             stiffness={
             "w_lb": 0.001,
             "w_lf": 0.001,

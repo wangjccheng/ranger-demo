@@ -155,7 +155,7 @@ class SkidSteerLegObsCfg:
             func=masked_height_scan,
             params={"sensor_cfg": SceneEntityCfg("height_scanner"), "mask_region": "front"},
             clip=(-2.0, 2.0),
-            noise=Gnoise(std=0.025),  # 适度噪声，增强鲁棒性
+            noise=Gnoise(std=0.01),  # 适度噪声，增强鲁棒性
             
         )
 
