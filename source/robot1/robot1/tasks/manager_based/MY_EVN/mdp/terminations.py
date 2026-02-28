@@ -10,7 +10,7 @@ the termination introduced by the function.
 """
 
 from __future__ import annotations
-
+import math
 import torch
 from typing import TYPE_CHECKING
 
@@ -50,3 +50,26 @@ def terrain_out_of_bounds(
         return torch.logical_or(x_out_of_bounds, y_out_of_bounds)
     else:
         raise ValueError("Received unsupported terrain type, must be either 'plane' or 'generator'.")
+    
+def bad_orientation(
+    env: ManagerBasedRLEnv, 
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"), 
+    limit_angle: float = 0.5
+) -> torch.Tensor:
+    """
+    当机器人的倾斜角度（Roll或Pitch）超过 limit_angle (弧度) 时，触发终止。
+    """
+    # 提取重力向量在机体系下的投影 (正常水平时应接近 [0, 0, -1])
+    proj_grav = env.scene[asset_cfg.name].data.projected_gravity_b
+    
+    # 提取 x, y 分量 (对应 Roll 和 Pitch 的倾斜程度)
+    grav_xy = proj_grav[:, :2]
+    
+    # 计算当前的倾斜幅度 (相当于 sin(倾角))
+    tilt_magnitude = torch.norm(grav_xy, dim=1)
+    
+    # 倾角上限转换为 sin 阈值
+    limit_threshold = math.sin(limit_angle)
+    
+    # 如果倾斜幅度大于阈值，返回 True (触发 Termination)
+    return tilt_magnitude > limit_threshold

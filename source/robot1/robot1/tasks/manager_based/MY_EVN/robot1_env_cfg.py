@@ -21,6 +21,8 @@ from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 from .mdp import SkidSteerLegObsCfg,SkidSteerLegRewardsCfg,SkidSteerLegEventsCfg,SkidSteerLegCurriculumCfg
 from .mdp.actions import ActionsCfg
 import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
+# 确保你导入了自定义的 terminations
+from .mdp import terminations as custom_terminations
 from .robot1 import ROBOT1_CFG
 ##
 # Pre-defined configs
@@ -139,13 +141,13 @@ class CommandsCfg:
     base_velocity = mdp.UniformVelocityCommandCfg(
         asset_name="robot",
         resampling_time_range=(6.0, 6.0),
-        rel_standing_envs=0.05,
+        rel_standing_envs=0.15,
         rel_heading_envs=0.5,
         heading_command=True,
         heading_control_stiffness=1.0,
         debug_vis=True,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(0, 0.8), lin_vel_y=(0, 0), ang_vel_z=(-0.4, 0.4), heading=(-math.pi, math.pi)
+            lin_vel_x=(-1.0, 1.0), lin_vel_y=(0, 0), ang_vel_z=(-0.5, 0.5), heading=(-math.pi, math.pi)
         ),
     )
 
@@ -159,9 +161,14 @@ class TerminationsCfg:
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names="base_link"), "threshold": 20000.0},
     )
     terrain_oob = DoneTerm(
-        func=mdp.terrain_out_of_bounds,
+        func=custom_terminations.terrain_out_of_bounds,
         params={"asset_cfg": SceneEntityCfg("robot"), "distance_buffer": 1.0},
         time_out=False,
+    )
+    # ★ 新增：如果机身倾斜超过特定角度（比如 roll/pitch 超过 30度），直接判死刑终止回合
+    bad_orientation = DoneTerm(
+        func=custom_terminations.bad_orientation,
+        params={"asset_cfg": SceneEntityCfg("robot"), "limit_angle": 0.5}, # 0.5 rad 大约是 28 度
     )
 
 

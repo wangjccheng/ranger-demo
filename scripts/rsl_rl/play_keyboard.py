@@ -33,6 +33,14 @@ from rsl_rl.runners import OnPolicyRunner
 from isaaclab_tasks.utils import parse_env_cfg, load_cfg_from_registry
 import robot1.tasks  # 注册任务
 
+# 假设你的自定义网络保存在 robot1 里的某个文件，比如 robot1.modules
+    # 请把下面这行的路径替换为你实际存放 CNNActorCriticRecurrent 的路径！
+from robot1.tasks.manager_based.MY_EVN.agents.cnn import CNNActorCriticRecurrent
+# 将自定义类塞入 RSL-RL runner 的作用域，使其可以通过字符串名字实例化
+    # 核心修复逻辑：把你的自定义类强行塞进 rsl_rl 的 runner 命名空间里
+import rsl_rl.runners.on_policy_runner as on_policy_runner
+on_policy_runner.CNNActorCriticRecurrent = CNNActorCriticRecurrent
+
 # --- 键盘控制器 ---
 class KeyboardController:
     def __init__(self, speed_scale=1.0, rot_scale=1.0):
@@ -110,11 +118,28 @@ def main():
             
         with torch.inference_mode():
             # 1. 覆盖指令
-            user_vel = torch.tensor(keyboard.cmd_vel, device=env.unwrapped.device).repeat(env.unwrapped.num_envs, 1)
+            user_vel = torch.tensor(keyboard.cmd_vel, dtype=torch.float32, device=env.unwrapped.device).repeat(env.unwrapped.num_envs, 1)
             try:
-                env.unwrapped.command_manager.get_term("base_velocity").vel_command[:] = user_vel[:, :3]
-            except: pass
-
+                cmd_term = env.unwrapped.command_manager.get_term("base_velocity")
+                # 兼容 Isaac Lab 的不同版本命名
+                if hasattr(cmd_term, 'command'):
+                    cmd_term.command[:, 0] = user_vel[:, 0]  # vx
+                    cmd_term.command[:, 1] = user_vel[:, 1]  # vy
+                    
+                    # 只有当键盘有转向输入时，才覆盖系统的 wz 指令
+                    if keyboard.cmd_vel[2] != 0.0:
+                        cmd_term.command[:, 2] = user_vel[:, 2] 
+                        
+                elif hasattr(cmd_term, 'vel_command_b'):
+                    cmd_term.vel_command_b[:, 0] = user_vel[:, 0]
+                    cmd_term.vel_command_b[:, 1] = user_vel[:, 1]
+                    if keyboard.cmd_vel[2] != 0.0:
+                        cmd_term.vel_command_b[:, 2] = user_vel[:, 2]
+                else:
+                    print(f"警告: 找不到 command 属性。可用属性为: {dir(cmd_term)}")
+                    
+            except Exception as e:
+                print(f"覆盖指令时发生错误: {e}")
             # 2. 推理与步进
             actions = policy(obs)
             obs, _, _, _ = env.step(actions)

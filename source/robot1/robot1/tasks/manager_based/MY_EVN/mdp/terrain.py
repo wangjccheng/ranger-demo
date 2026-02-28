@@ -1,6 +1,6 @@
 
 import isaaclab.terrains as terrain_utils
-from isaaclab.terrains.height_field.hf_terrains_cfg import HfWaveTerrainCfg
+from isaaclab.terrains.height_field.hf_terrains_cfg import HfWaveTerrainCfg,HfRandomUniformTerrainCfg
 from isaaclab.utils import configclass
 
 
@@ -12,9 +12,18 @@ WAVE_TERRAINS_CFG = terrain_utils.TerrainGeneratorCfg(
     num_rows=8,                # 子地形行数
     num_cols=8,                # 子地形列数
     horizontal_scale=0.05,     # 高度场格子大小 (x,y 方向) [m]
-    vertical_scale=0.01,       # 高度步长 (z 方向) [m]
+    vertical_scale=0.005,       # 高度步长 (z 方向) [m]
     slope_threshold=None,      # 如需把过陡的坡改成竖直面可设置阈值
     sub_terrains={
+        # 新增：绝对平坦的地形
+        "flat": HfRandomUniformTerrainCfg(
+            proportion=0.3,          # 30% 的地块是平地 (你可以自由调节这个比例)
+            size=(10.0, 10.0),
+            horizontal_scale=0.02,   # 必须与主级 scale 保持一致
+            vertical_scale=0.005,    # 必须与主级 scale 保持一致
+            noise_range=(0.0, 0.0),  # 噪声设为0，就是完美的平地
+            noise_step=0.0,
+        ),
         # 关键字段：这里用 HfWaveTerrainCfg 做子地形
         "waves": HfWaveTerrainCfg(
             size=(10.0, 10.0),
@@ -22,7 +31,7 @@ WAVE_TERRAINS_CFG = terrain_utils.TerrainGeneratorCfg(
             vertical_scale=0.01,
             amplitude_range=(0.08, 0.14),  # ★ 波浪振幅区间 [m]
             num_waves=4,                 # ★ 波数（越大，波越密）
-            proportion=1.0,              # 只生成这一种子地形
+            proportion=0.7,              # 只生成这一种子地形
         ),
     },
 )

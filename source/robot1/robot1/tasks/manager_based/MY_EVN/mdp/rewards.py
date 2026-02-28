@@ -174,7 +174,7 @@ class SkidSteerLegRewardsCfg:
 
     # 5) 能耗与控制平滑 [4]
     dof_torques_l2 = RewTerm(func=mdp.rewards.joint_torques_l2, weight=0)
-    dof_acc_l2     = RewTerm(func=mdp.rewards.joint_acc_l2,     weight=-5e-7)
+    dof_acc_l2     = RewTerm(func=mdp.rewards.joint_acc_l2,     weight=-5.0e-6)
     action_rate_l2 = RewTerm(func=mdp.rewards.action_rate_l2,   weight=-0.00005)
 
     # 6) 可选：卡住终止的惩罚（依赖 TerminationManager 的 "stuck" 条目）[4][5]
@@ -199,13 +199,13 @@ class SkidSteerLegRewardsCfg:
             ),
             "max_air_time": 0.5,
         },
-        weight=-0.030,   # 先给一个比较温和的权重，后面看效果再调
+        weight=-0.010,   # 先给一个比较温和的权重，后面看效果再调
     )
 
-    log_pitch_monitor = RewTerm(
-        func=log_base_pitch, # 指向上面定义的函数
-        weight=-0.000573,                      # 权重为 0，不影响训练
-    )
+    #log_pitch_monitor = RewTerm(
+    #    func=log_base_pitch, # 指向上面定义的函数
+    #    weight=-0.000573,                      # 权重为 0，不影响训练
+    #)
     
     
     #可以通过观察机器人训练过程中的奖励数量级来分析权重值是否合理

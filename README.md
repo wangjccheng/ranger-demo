@@ -127,7 +127,7 @@ python scripts/zero_agent.py --task <TASK_NAME>
 
 
 python scripts/rsl_rl/sim2sim.py
-python scripts/rsl_rl/export_gru_cnn_jit.py --task sk-Robot1-v0 --load_run 2026-02-26_18-12-48 --checkpoint model_1000.pt --export_path /home/wjc/robot1/jit_models/policy_lstm_2.pt
+python scripts/rsl_rl/export_gru_cnn_jit.py --task sk-Robot1-v0 --export_path /home/wjc/robot1/jit_models/policy_3.pt --load_run 2026-02-27_15-31-18 --checkpoint model_2999.pt --export_path /home/wjc/robot1/jit_models/policy_lstm_2.pt
 watch -n 1 nvidia-smi
 python scripts/rsl_rl/train.py     --task sk-Robot1-v0     --logger wandb     --log_project_name robot1-rough  --video --headless
 

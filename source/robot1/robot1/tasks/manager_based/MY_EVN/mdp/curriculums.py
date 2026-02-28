@@ -260,7 +260,7 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "dof_torques_l2",    # 抑制扭矩
             "start_weight": 0.0,
-            "end_weight": -5.0e-7,
+            "end_weight": -5.0e-6,
             "total_steps": 2.4e5,
         },
     )
