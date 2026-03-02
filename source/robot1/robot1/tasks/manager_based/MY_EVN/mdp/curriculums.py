@@ -119,36 +119,8 @@ def anneal_reward_term_param(
             env.reward_manager.set_term_cfg(term_name, term_cfg)
     except Exception as e:
         print(f"Error updating curriculum param for {term_name}: {e}")
-'''
-def anneal_reward_term_weight(
-    env: ManagerBasedRLEnv,
-    env_ids: Sequence[int],
-    term_name: str,
-    start_weight: float,
-    end_weight: float,
-    total_steps: int,
-) -> None:
-    """
-    权重退火：随着训练步数，将指定奖励项的权重从 start_weight 线性过渡到 end_weight。
-    """
-    current_step = env.common_step_counter
-    
-    if current_step >= total_steps:
-        new_weight = end_weight
-    else:
-        alpha = current_step / float(total_steps)
-        new_weight = start_weight + (end_weight - start_weight) * alpha
 
-    try:
-        term_cfg = env.reward_manager.get_term_cfg(term_name)
-        if term_cfg.weight != new_weight:
-            term_cfg.weight = new_weight
-    except Exception:
-        pass
-    
-    
-    return None
-'''
+
 def anneal_reward_term_weight(
     env: ManagerBasedRLEnv,
     env_ids: Sequence[int],
@@ -219,7 +191,7 @@ class SkidSteerLegCurriculumCfg:
             "term_name": "flat_orientation_l2",  # 对应 rewards 配置中的名字
             "start_weight": -1.0,                # 初期：轻微惩罚，允许它歪歪扭扭地跑
             "end_weight": -50.0,                # 后期：重罚，强迫它收敛到水平姿态
-            "total_steps": 1.8e5,                # 在前 10万~20万步完成过渡
+            "total_steps": 1.5e5,                # 在前 10万~20万步完成过渡
         },
     )
 
@@ -231,8 +203,8 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "slip_consistency", # 对应 rewards.py 中的变量名
             "start_weight": 0.0,             # 初始：不惩罚打滑
-            "end_weight": -0.001,            # 最终：施加惩罚 (您原本的设定)
-            "total_steps": 2.4e5,            # 较快引入惩罚(1亿步)，尽早规范动作
+            "end_weight": -0.01,            # 最终：施加惩罚 (您原本的设定)
+            "total_steps": 1.5e5,            # 较快引入惩罚(1亿步)，尽早规范动作
         },
     )
     
@@ -242,7 +214,7 @@ class SkidSteerLegCurriculumCfg:
             "term_name": "lin_vel_z_l2",     # 抑制弹跳
             "start_weight": 0.0,
             "end_weight": -0.1,
-            "total_steps": 1.8e5,
+            "total_steps": 1.5e5,
         },
     )
 
@@ -252,16 +224,55 @@ class SkidSteerLegCurriculumCfg:
             "term_name": "ang_vel_xy_l2",    # 抑制倾斜
             "start_weight": 0.0,
             "end_weight": -0.1,
-            "total_steps": 1.8e5,
+            "total_steps": 1.5e5,
         },
     )
+    
+    led_speed_penalty = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "leg_speed_l2",    # 抑制调距关节速度
+            "start_weight": 0.0,
+            "end_weight": -0.005,
+            "total_steps": 1.5e5,
+        },
+    )
+    led_center_penalty = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "leg_center_l2",    # 抑制调距关节偏离默认位置
+            "start_weight": 0.0,
+            "end_weight": -0.1,
+            "total_steps": 1.5e5,
+        },
+    )
+        
     dof_torques_penalty = CurrTerm(
         func=anneal_reward_term_weight,
         params={
             "term_name": "dof_torques_l2",    # 抑制扭矩
             "start_weight": 0.0,
             "end_weight": -5.0e-6,
-            "total_steps": 2.4e5,
+            "total_steps": 2.0e5,
+        },
+    )
+    
+    action_rate_penalty = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "action_rate_l2",    # 抑制动作变化率
+            "start_weight": 0.0,
+            "end_weight": -0.02,
+            "total_steps": 2.0e5,
+        },
+    )
+    dof_acc_penalty = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "dof_acc_l2",    # 抑制加速度
+            "start_weight": 0.0,
+            "end_weight": -5.0e-7,
+            "total_steps": 2.0e5,
         },
     )
     terrain_levels = CurrTerm(func=terrain_levels_vel)

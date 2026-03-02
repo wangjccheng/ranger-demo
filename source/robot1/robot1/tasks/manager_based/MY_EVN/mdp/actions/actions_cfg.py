@@ -29,8 +29,8 @@ class SkidSteerLegActionCfg(ActionTermCfg):
 
     # 调距关节映射：二选一
     leg_rescale_to_limits: bool = False           # True 时用软限把 [-1,1] 反归一化到实际范围
-    leg_scale: float = 0.25                      # False 时，线性映射的缩放
-    leg_offset: float = 0.0                      # False 时，线性映射的偏置
+    leg_scale: float = 0.30                      # False 时，线性映射的缩放
+    leg_offset: float = 0.05                      # False 时，线性映射的偏置
     # +++ 【新增】: 低通滤波系数 (模拟响应延迟) +++
     # alpha 范围 (0, 1]。1.0 代表理想执行器(无延迟)，数值越小延迟/惯性越大
     action_alpha: float = 0.3
@@ -47,10 +47,10 @@ class ActionsCfg:
         leg_joint_names=["g_lf", "g_rf", "g_lb", "g_rb"],  # 或 "g_.*"
         base_width=0.5,
         wheel_radius=0.05,
-        base_scale=(1.0, 1.0),
+        base_scale=(1.0, 0.5),
         bounding_strategy="clip",
         no_reverse=False,
-        leg_rescale_to_limits=True,  # 建议用软限反归一化
+        leg_rescale_to_limits=False,  # 建议用软限反归一化
         # +++ 【新增】 +++
         action_alpha=0.3, # 建议从 0.3 或 0.4 开始训练
     )

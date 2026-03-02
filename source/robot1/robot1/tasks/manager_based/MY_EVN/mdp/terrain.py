@@ -15,59 +15,23 @@ WAVE_TERRAINS_CFG = terrain_utils.TerrainGeneratorCfg(
     vertical_scale=0.005,       # 高度步长 (z 方向) [m]
     slope_threshold=None,      # 如需把过陡的坡改成竖直面可设置阈值
     sub_terrains={
-        # 新增：绝对平坦的地形
-        "flat": HfRandomUniformTerrainCfg(
-            proportion=0.3,          # 30% 的地块是平地 (你可以自由调节这个比例)
-            size=(10.0, 10.0),
-            horizontal_scale=0.02,   # 必须与主级 scale 保持一致
-            vertical_scale=0.005,    # 必须与主级 scale 保持一致
-            noise_range=(0.0, 0.0),  # 噪声设为0，就是完美的平地
-            noise_step=0.0,
-        ),
+            # 🌟 修改后的绝对平坦地形
+        #"flat": HfRandomUniformTerrainCfg(
+        #    proportion=0.3,          
+        #    size=(10.0, 10.0),
+        #    horizontal_scale=0.02,   
+        #    vertical_scale=0.005,    
+        #    noise_range=(0.0, 0.0),  # 高度范围全为0，保证是平地
+        #    noise_step=0.01,         # 🌟 把这里的 0.0 改为 0.01 (只要不是0就行)
+        #),
         # 关键字段：这里用 HfWaveTerrainCfg 做子地形
         "waves": HfWaveTerrainCfg(
             size=(10.0, 10.0),
             horizontal_scale=0.05,
             vertical_scale=0.01,
-            amplitude_range=(0.08, 0.14),  # ★ 波浪振幅区间 [m]
+            amplitude_range=(0.00, 0.12),  # ★ 波浪振幅区间 [m]
             num_waves=4,                 # ★ 波数（越大，波越密）
-            proportion=0.7,              # 只生成这一种子地形
+            proportion=1.0,              # 只生成这一种子地形
         ),
     },
 )
-'''
-import isaaclab.terrains as terrain_gen
-from isaaclab.terrains import TerrainGeneratorCfg
-
-
-
-
-# 定义波浪地形配置
-WAVE_TERRAINS_CFG = TerrainGeneratorCfg(
-    # 地形总尺寸设置
-    size=(8.0, 8.0),
-    border_width=20.0,
-    
-    # 难度等级数量
-    num_rows=10,  
-    num_cols=10, 
-    
-    # ★ 核心修改：使用 HfWaveTerrainCfg 并修正参数
-    sub_terrains={
-        "waves": terrain_gen.HfWaveTerrainCfg(
-            proportion=1.0,  
-            
-            # --- 难度参数 (由简单到复杂) ---
-            # amplitude_range: 波浪高度范围 (Level 0 -> Level 9)
-            amplitude_range=(0.07, 0.12), 
-            
-            # num_waves: 波浪数量 (控制波浪的密集程度/频率)
-            # 注意：这是一个固定值，不是 range。通常设置在 6 到 10 之间。
-            num_waves=4, 
-        )
-    },
-    
-    # 开启课程学习
-    curriculum=True, 
-)
-'''

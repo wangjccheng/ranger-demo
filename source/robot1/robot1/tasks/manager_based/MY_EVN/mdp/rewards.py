@@ -10,14 +10,23 @@ from isaaclab.managers import RewardTermCfg as RewTerm, SceneEntityCfg
 # ---------------------------
 
 def leg_pos_center_l2(env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot", joint_names="g_.*")) -> torch.Tensor:
-    """调距关节“回中”惩罚：把关节位置按软限归一化到 [-1,1]，惩罚偏离 0 的平方和。"""
+    """调距关节“偏离默认姿态”惩罚：惩罚偏离默认待机姿态(0.05)的平方和。"""
     asset = env.scene[asset_cfg.name]
-    q   = asset.data.joint_pos[:, asset_cfg.joint_ids]                  # [N, M]
+    
+    # 1. 获取当前真实物理角度
+    q = asset.data.joint_pos[:, asset_cfg.joint_ids]
+    
+    # 2. ★ 核心修改：不再计算软限位中点，而是直接读取硬件配置里的默认角度（也就是你刚设的 0.05）
+    default_q = asset.data.default_joint_pos[:, asset_cfg.joint_ids]
+    
+    # 获取软限位宽度的一半（依然用来做归一化，保证扣分的量级和以前一样）
     low = asset.data.soft_joint_pos_limits[:, asset_cfg.joint_ids, 0]
     high= asset.data.soft_joint_pos_limits[:, asset_cfg.joint_ids, 1]
-    mid = 0.5 * (low + high)
     half= torch.clamp(0.5 * (high - low), min=1e-6)
-    qn  = torch.clamp((q - mid) / half, -1.0, 1.0)
+    
+    # 3. 计算偏离“默认角度”的归一化误差
+    qn = torch.clamp((q - default_q) / half, -1.0, 1.0)
+    
     return torch.sum(qn**2, dim=1)
 
 def leg_vel_l2(env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot", joint_names="g_.*")) -> torch.Tensor:
@@ -153,12 +162,12 @@ class SkidSteerLegRewardsCfg:
     leg_center_l2 = RewTerm(
         func=leg_pos_center_l2,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names="g_.*")},
-        weight=-0.0005,
+        weight=-0.1,
     )
     leg_speed_l2 = RewTerm(
         func=leg_vel_l2,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names="g_.*")},
-        weight=-0.0005,
+        weight=-0.005,
     )
 
     # 4) 打滑一致性（自定义）
@@ -174,8 +183,8 @@ class SkidSteerLegRewardsCfg:
 
     # 5) 能耗与控制平滑 [4]
     dof_torques_l2 = RewTerm(func=mdp.rewards.joint_torques_l2, weight=0)
-    dof_acc_l2     = RewTerm(func=mdp.rewards.joint_acc_l2,     weight=-5.0e-6)
-    action_rate_l2 = RewTerm(func=mdp.rewards.action_rate_l2,   weight=-0.00005)
+    dof_acc_l2     = RewTerm(func=mdp.rewards.joint_acc_l2,     weight=0)
+    action_rate_l2 = RewTerm(func=mdp.rewards.action_rate_l2,   weight=0)
 
     # 6) 可选：卡住终止的惩罚（依赖 TerminationManager 的 "stuck" 条目）[4][5]
     #stuck_penalty = RewTerm(

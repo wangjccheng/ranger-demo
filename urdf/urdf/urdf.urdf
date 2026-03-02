@@ -533,4 +533,4 @@
         <compiler balanceinertia="true" discardvisual="false" meshdir="../meshes"/>
     </mujoco>
 </robot>
-</robot>
+

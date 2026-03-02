@@ -28,7 +28,7 @@ palette = {
 
 # 加载数据
 try:
-    df = pd.read_csv("/home/wjc/robot1/data/paper_experiments_data1.csv")
+    df = pd.read_csv("/home/wjc/robot1/data/paper_experiments_data.csv")
 except FileNotFoundError:
     print("Error: 找不到 paper_experiments_data1.csv。请先运行 evaluate_paper.py！")
     exit()
@@ -81,10 +81,12 @@ df["vel_error_sq"] = (df["actual_vx"] - df["cmd_vx"]) ** 2
 vel_rmse = np.sqrt(df.groupby("method")["vel_error_sq"].mean()).reset_index()
 vel_rmse.rename(columns={"vel_error_sq": "RMSE"}, inplace=True)
 
-sns.barplot(data=vel_rmse, x="method", y="RMSE", palette=palette, ax=ax3a)
+# 🌟 修改为：(加上 hue="method", legend=False，并先 set_xticks)
+sns.barplot(data=vel_rmse, x="method", y="RMSE", hue="method", palette=palette, legend=False, ax=ax3a)
 ax3a.set_title("Velocity Tracking Error (RMSE)")
 ax3a.set_ylabel("Error (m/s)")
 ax3a.set_xlabel("")
+ax3a.set_xticks(range(3)) # 先固定 3 个刻度
 ax3a.set_xticklabels(["Passive", "Trad. PID", "Ours\n(RL)"])
 for i, v in enumerate(vel_rmse["RMSE"]):
     ax3a.text(i, v + 0.005, f"{v:.3f}", ha='center', fontweight='bold')
@@ -93,10 +95,11 @@ for i, v in enumerate(vel_rmse["RMSE"]):
 z_accel_std = df.groupby("method")["z_accel"].std().reset_index()
 z_accel_std.rename(columns={"z_accel": "Std"}, inplace=True)
 
-sns.barplot(data=z_accel_std, x="method", y="Std", palette=palette, ax=ax3b)
+sns.barplot(data=z_accel_std, x="method", y="Std", hue="method", palette=palette, legend=False, ax=ax3b)
 ax3b.set_title("Vertical Vibration (Z-Accel Std)")
 ax3b.set_ylabel("Std Dev (m/s²)")
 ax3b.set_xlabel("")
+ax3b.set_xticks(range(3)) # 先固定 3 个刻度
 ax3b.set_xticklabels(["Passive", "Trad. PID", "Ours\n(RL)"])
 for i, v in enumerate(z_accel_std["Std"]):
     ax3b.text(i, v + 0.1, f"{v:.2f}", ha='center', fontweight='bold')

@@ -5,20 +5,14 @@ from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
 ROBOT1_CFG = ArticulationCfg(
     spawn=sim_utils.UsdFileCfg(
-        usd_path=f"/home/wjc/robot1/urdf/usd/urdf/urdf copy.usd",          # 替换为你前面导出的机器人usd文件路径
+        usd_path=f"/home/wjc/robot1/urdf/usd/urdf/urdf.usd",          # 替换为你前面导出的机器人usd文件路径
         activate_contact_sensors=True,          #地面接触检测
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=False,
-            retain_accelerations=False,
-            #rigid_body_enabled=True, # 开启刚体
-            linear_damping=0.0,
-            angular_damping=0.0,
-            max_linear_velocity=10000.0,
-            max_angular_velocity=10000.0,
             max_depenetration_velocity=10000.0,
         ),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-            enabled_self_collisions=True, solver_position_iteration_count=4, solver_velocity_iteration_count=4
+            enabled_self_collisions=True, solver_position_iteration_count=6, solver_velocity_iteration_count=6
         ),
     ),
     init_state=ArticulationCfg.InitialStateCfg(
@@ -53,7 +47,7 @@ ROBOT1_CFG = ArticulationCfg(
             "g_rb",
             ],
             effort_limit_sim=500,
-            velocity_limit_sim=2.0,
+            velocity_limit_sim=3.0,
             stiffness={
             "g_lb": 2400,
             "g_lf": 2400,
@@ -80,10 +74,10 @@ ROBOT1_CFG = ArticulationCfg(
             effort_limit=500,
             velocity_limit=30.0,
             stiffness={
-            "w_lb": 0.001,
-            "w_lf": 0.001,
-            "w_rf": 0.001,
-            "w_rb": 0.001,
+            "w_lb": 0.0001,
+            "w_lf": 0.0001,
+            "w_rf": 0.0001,
+            "w_rb": 0.0001,
             },
             damping={
             "w_lb": 80.0,

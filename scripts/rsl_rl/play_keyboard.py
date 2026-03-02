@@ -92,7 +92,7 @@ def main():
     ppo_runner.load(checkpoint_path)
     policy = ppo_runner.get_inference_policy(device=env.unwrapped.device)
 
-    keyboard = KeyboardController(speed_scale=1.0, rot_scale=1.0)
+    keyboard = KeyboardController(speed_scale=1.0, rot_scale=0.5)
     
     # === 数据记录容器 ===
     logs = {

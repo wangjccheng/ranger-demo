@@ -54,7 +54,7 @@ def terrain_out_of_bounds(
 def bad_orientation(
     env: ManagerBasedRLEnv, 
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"), 
-    limit_angle: float = 0.5
+    limit_angle: float = 0.3
 ) -> torch.Tensor:
     """
     当机器人的倾斜角度（Roll或Pitch）超过 limit_angle (弧度) 时，触发终止。
