@@ -82,7 +82,7 @@ class SkidSteerLegAction(ActionTerm):
 
     def _bound_base_cmd(self, cmd: torch.Tensor) -> torch.Tensor:
         if self._bounding_strategy == "clip":
-            return torch.clamp(cmd, -1.0, 1.0)
+            return torch.clamp(cmd, -2.0, 2.0)
         elif self._bounding_strategy == "tanh":
             return torch.tanh(cmd)
         return cmd

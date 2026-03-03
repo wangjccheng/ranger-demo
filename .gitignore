@@ -73,3 +73,7 @@ tests/
 #data
 data/
 paper/
+wandb/
+outputs/
+.vscode/
+logs/

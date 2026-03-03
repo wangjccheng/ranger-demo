@@ -46,14 +46,17 @@ def terrain_levels_vel(
     command = env.command_manager.get_command("base_velocity")
     # compute the distance the robot walked
     distance = torch.norm(asset.data.root_pos_w[env_ids, :2] - env.scene.env_origins[env_ids, :2], dim=1)
-    # robots that walked far enough progress to harder terrains
+    
+    # ★ 修改 1：升级条件不变（跑出当前地形块一半，即 > 5米 就可以升级）
     move_up = distance > terrain.cfg.terrain_generator.size[0] / 2
-    # robots that walked less than half of their required distance go to simpler terrains
-    move_down = distance < torch.norm(command[env_ids, :2], dim=1) * env.max_episode_length_s * 0.5
+    
+    # ★ 修改 2：大幅放宽降级门槛！
+    # 因为有转向，直线距离本来就短。把系数 0.5 改成 0.15 甚至 0.1。
+    # 意思是：只要你不是完全卡死在原地（连目标距离的 15% 都没达到），我就不给你留级！
+    move_down = distance < torch.norm(command[env_ids, :2], dim=1) * env.max_episode_length_s * 0.15
     move_down *= ~move_up
-    # update terrain levels
+    
     terrain.update_env_origins(env_ids, move_up, move_down)
-    # return the mean terrain level
     return torch.mean(terrain.terrain_levels.float())
 
 def increase_reward_weight_over_time(
@@ -169,8 +172,8 @@ class SkidSteerLegCurriculumCfg:
             "term_name": "track_lin_vel_xy_exp", 
             "param_name": "std",
             "start_val": 0.5,           # 初始：允许 ±1m/s 的误差仍有较高奖励
-            "end_val": 0.15,             # 最终：必须非常精准 (您原本的设定)
-            "total_steps": 1.0e5,       # 在 2亿步(约一半训练程)内完成收紧
+            "end_val": 0.2,             # 最终：必须非常精准 (您原本的设定)
+            "total_steps": 1.1e5,       # 在 2亿步(约一半训练程)内完成收紧
         },
     )
     
@@ -181,16 +184,16 @@ class SkidSteerLegCurriculumCfg:
             "term_name": "track_ang_vel_z_exp",
             "param_name": "std",
             "start_val": 0.5,
-            "end_val": 0.15, 
-            "total_steps": 1.0e5,
+            "end_val": 0.2, 
+            "total_steps": 1.1e5,
         },
     )
     anneal_flat_orientation_penalty = CurrTerm(
         func=anneal_reward_term_weight,
         params={
             "term_name": "flat_orientation_l2",  # 对应 rewards 配置中的名字
-            "start_weight": -1.0,                # 初期：轻微惩罚，允许它歪歪扭扭地跑
-            "end_weight": -50.0,                # 后期：重罚，强迫它收敛到水平姿态
+            "start_weight": 0.0,                # 初期：轻微惩罚，允许它歪歪扭扭地跑
+            "end_weight": -1000.0,                # 后期：重罚，强迫它收敛到水平姿态
             "total_steps": 1.5e5,                # 在前 10万~20万步完成过渡
         },
     )
@@ -203,7 +206,7 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "slip_consistency", # 对应 rewards.py 中的变量名
             "start_weight": 0.0,             # 初始：不惩罚打滑
-            "end_weight": -0.01,            # 最终：施加惩罚 (您原本的设定)
+            "end_weight": -20,            # 最终：施加惩罚 (您原本的设定)
             "total_steps": 1.5e5,            # 较快引入惩罚(1亿步)，尽早规范动作
         },
     )
@@ -213,8 +216,8 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "lin_vel_z_l2",     # 抑制弹跳
             "start_weight": 0.0,
-            "end_weight": -0.1,
-            "total_steps": 1.5e5,
+            "end_weight": -20,
+            "total_steps": 1.8e5,
         },
     )
 
@@ -224,7 +227,7 @@ class SkidSteerLegCurriculumCfg:
             "term_name": "ang_vel_xy_l2",    # 抑制倾斜
             "start_weight": 0.0,
             "end_weight": -0.1,
-            "total_steps": 1.5e5,
+            "total_steps": 1.8e5,
         },
     )
     
@@ -233,8 +236,8 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "leg_speed_l2",    # 抑制调距关节速度
             "start_weight": 0.0,
-            "end_weight": -0.005,
-            "total_steps": 1.5e5,
+            "end_weight": -0.2,
+            "total_steps": 2.0e5,
         },
     )
     led_center_penalty = CurrTerm(
@@ -242,8 +245,8 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "leg_center_l2",    # 抑制调距关节偏离默认位置
             "start_weight": 0.0,
-            "end_weight": -0.1,
-            "total_steps": 1.5e5,
+            "end_weight": -0.05,
+            "total_steps": 1.2e5,
         },
     )
         
@@ -252,8 +255,8 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "dof_torques_l2",    # 抑制扭矩
             "start_weight": 0.0,
-            "end_weight": -5.0e-6,
-            "total_steps": 2.0e5,
+            "end_weight": -2e-6,
+            "total_steps": 2.2e5,
         },
     )
     
@@ -262,8 +265,8 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "action_rate_l2",    # 抑制动作变化率
             "start_weight": 0.0,
-            "end_weight": -0.02,
-            "total_steps": 2.0e5,
+            "end_weight": -5,
+            "total_steps": 1.8e5,
         },
     )
     dof_acc_penalty = CurrTerm(
@@ -271,8 +274,8 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "dof_acc_l2",    # 抑制加速度
             "start_weight": 0.0,
-            "end_weight": -5.0e-7,
-            "total_steps": 2.0e5,
+            "end_weight": -1.0e-7,
+            "total_steps": 2.2e5,
         },
     )
     terrain_levels = CurrTerm(func=terrain_levels_vel)
@@ -282,7 +285,7 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "contact_penalty",  # 对应 rewards 配置中的名字
             "start_weight": -0.2,                # 初期：不惩罚接触
-            "end_weight": -1.0,                # 后期：重罚，强迫它避免接触障碍物
+            "end_weight": -10.0,                # 后期：重罚，强迫它避免接触障碍物
             "total_steps": 1.0e5,                # 在前 10万~20万步完成过渡
         },
     )

@@ -22,7 +22,7 @@ class SkidSteerLegActionCfg(ActionTermCfg):
     leg_joint_names: list[str] | str = MISSING
 
     # 底盘标定/约束
-    base_scale: tuple[float, float] = (1.0, 0.5)  # 分别为 v 与 omega 的缩放
+    base_scale: tuple[float, float] = (2.0, 0.8)  # 分别为 v 与 omega 的缩放
     base_offset: tuple[float, float] = (0.0, 0.0)
     bounding_strategy: str | None = "clip"       # "clip"/"tanh"/None
     no_reverse: bool = False                     # True 则 v>=0
@@ -47,7 +47,7 @@ class ActionsCfg:
         leg_joint_names=["g_lf", "g_rf", "g_lb", "g_rb"],  # 或 "g_.*"
         base_width=0.5,
         wheel_radius=0.05,
-        base_scale=(1.0, 0.5),
+        base_scale=(2.0, 0.8),
         bounding_strategy="clip",
         no_reverse=False,
         leg_rescale_to_limits=False,  # 建议用软限反归一化

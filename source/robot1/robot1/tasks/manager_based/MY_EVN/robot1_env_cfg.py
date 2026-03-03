@@ -113,7 +113,7 @@ class MySceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/Robot/base_link",  # 将robotis_op3/base替换为自己的机器人名称/base_link的link名称
         offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
         ray_alignment="yaw",
-        pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[2.0, 2.0]),
+        pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[2.4, 2.4]),
         debug_vis=False,
         mesh_prim_paths=["/World/ground"],
     )
@@ -142,12 +142,12 @@ class CommandsCfg:
         asset_name="robot",
         resampling_time_range=(6.0, 6.0),
         rel_standing_envs=0.15,
-        rel_heading_envs=0.5,
+        rel_heading_envs=0.3,
         heading_command=True,
         heading_control_stiffness=1.0,
         debug_vis=True,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(-0.85, 0.85), lin_vel_y=(0, 0), ang_vel_z=(-0.4, 0.4), heading=(-math.pi, math.pi)
+            lin_vel_x=(-1.5, 1.5), lin_vel_y=(0, 0), ang_vel_z=(-0.8, 0.8), heading=(-math.pi, math.pi)
         ),
     )
 
@@ -207,7 +207,7 @@ class ROBOT1RoughEnvCfg(ManagerBasedRLEnvCfg):
         self.episode_length_s = 40.0
         # simulation settings
         
-        self.viewer.eye = (-45.0, 0.0, 6.0)       # 相机放高、放远一点
+        self.viewer.eye = (-50.0, 0.0, 6.0)       # 相机放高、放远一点
         self.viewer.look_at = (-1.0, 0.0, -1.5)   # 看向机器人附近
         
         self.sim.dt = 0.002

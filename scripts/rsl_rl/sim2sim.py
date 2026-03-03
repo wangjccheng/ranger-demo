@@ -8,7 +8,7 @@ from scipy.spatial.transform import Rotation as R
 # ==========================================
 # 1. 基础配置参数
 # ==========================================
-POLICY_PATH = "/home/wjc/robot1/jit_models/policy_4.pt" # 请确保路径和文件名正确
+POLICY_PATH = "/home/wjc/robot1/jit_models/policy_5.pt" # 请确保路径和文件名正确
 XML_PATH = "/home/wjc/mujoco-3.5.0/urdf/xml/ranger2.xml"             
 
 SIM_DT = 0.002           
@@ -27,10 +27,71 @@ DEFAULT_LEG_POS = 0.05
 BASE_LIN_VEL_SCALE = 1.0   # 对应 base_scale[0]
 BASE_ANG_VEL_SCALE = 0.5  # 对应 base_scale[1]
 
+def get_real_height_scan(model, data):
+    base_pos = data.qpos[:3]  
+    base_quat = data.qpos[3:7] 
+    
+    # 算偏航角，保证雷达网格跟着车头转
+    r = R.from_quat([base_quat[1], base_quat[2], base_quat[3], base_quat[0]])
+    yaw = r.as_euler('zyx')[0]
+    cos_yaw, sin_yaw = np.cos(yaw), np.sin(yaw)
+
+    grid_points = np.linspace(-1.0, 1.0, 21)
+    lx, ly = np.meshgrid(grid_points, grid_points, indexing='xy')
+    lx_flat = lx.flatten()
+    ly_flat = ly.flatten()
+
+    world_x = base_pos[0] + lx_flat * cos_yaw - ly_flat * sin_yaw
+    world_y = base_pos[1] + lx_flat * sin_yaw + ly_flat * cos_yaw
+
+    height_scan = np.zeros(441, dtype=np.float32)
+    hit_points = np.zeros((441, 3), dtype=np.float32) # ★ 新增：用于保存绝对坐标
+    geomid = np.zeros(1, dtype=np.int32)
+    body_exclude_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "base_link")
+
+    for i in range(441):
+        pnt = np.array([world_x[i], world_y[i], 2.0], dtype=np.float64)
+        vec = np.array([0.0, 0.0, -1.0], dtype=np.float64)
+        dist = mujoco.mj_ray(model, data, pnt, vec, None, 1, body_exclude_id, geomid)
+        
+        if dist > 0:
+            hit_z = 2.0 - dist
+        else:
+            hit_z = -1.0
+            
+        height_scan[i] = hit_z - base_pos[2]
+        
+        # ★ 新增：保存击中点的物理世界坐标（为了防止红点被埋在地里，Z轴稍微抬高 2 厘米）
+        hit_points[i] = [world_x[i], world_y[i], hit_z + 0.02] 
+        
+    return height_scan, hit_points # ★ 修改：同时返回相对高度和绝对坐标点
+def generate_wavy_terrain(model):
+    """
+    在内存中直接修改 hfield 数据，生成正弦波浪地形
+    """
+    hfield_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_HFIELD, "wavy_terrain")
+    if hfield_id == -1: return
+
+    nrow = model.hfield_nrow[hfield_id]
+    ncol = model.hfield_ncol[hfield_id]
+    start_idx = model.hfield_adr[hfield_id]
+
+    # 遍历网格点，注入波浪高度 (归一化到 0~1 之间)
+    for i in range(nrow):
+        for j in range(ncol):
+            # 将网格索引映射到物理空间相位
+            x_phase = (i / nrow) * 6.0 * np.pi  # X方向生成3个波峰
+            y_phase = (j / ncol) * 4.0 * np.pi  # Y方向生成2个波峰
+            
+            # 生成混合波浪 (0.0 表示最低点，1.0 表示达到 XML 中设置的 max_z)
+            z_normalized = 0.5 * (np.sin(x_phase) * np.cos(y_phase)) + 0.5
+            # 如果你想让波浪平缓一点，可以乘以一个衰减系数，比如 0.2
+            model.hfield_data[start_idx + i * ncol + j] = z_normalized * 0.2
+
 # ==========================================
 # 2. 观测构建函数 (471维)
 # ==========================================
-def get_observation(data, prev_action, command):
+def get_observation(model, data, prev_action, command):
     """
     严格按照 SkidSteerLegObsCfg 顺序拼接
     关节顺序严格匹配 URDF: LB, LF, RF, RB
@@ -63,8 +124,9 @@ def get_observation(data, prev_action, command):
     # 9. height_scan (441,)
     # 修复“活埋BUG”：平地的高度差 = 0.0 - 车身绝对Z坐标
     base_z = data.qpos[2]
-    height_scan = np.full(441, 0.0 - base_z, dtype=np.float32)
-
+    # ★ 调用真实的物理射线扫描：
+    height_scan, hit_points = get_real_height_scan(model, data)
+    
     obs_list = [
         base_ang_vel,   # 3
         proj_grav,      # 3
@@ -76,13 +138,15 @@ def get_observation(data, prev_action, command):
         prev_action,    # 6
         height_scan     # 441
     ]
-    return np.concatenate(obs_list).astype(np.float32)
+    return np.concatenate(obs_list).astype(np.float32), hit_points
 
 # ==========================================
 # 3. 主控制循环
 # ==========================================
 def main():
     model = mujoco.MjModel.from_xml_path(XML_PATH)
+    # ★ 注入波浪地形
+    generate_wavy_terrain(model)
     data = mujoco.MjData(model)
     model.opt.timestep = SIM_DT
 
@@ -157,11 +221,11 @@ def main():
             # =======================================================
             # --- 1.5 秒后，正常接管控制逻辑 ---
             # =======================================================
-            current_cmd = np.array([0.2, 0.0, 0.2], dtype=np.float32)
+            current_cmd = np.array([2.0, 0.0, 0.0], dtype=np.float32)
             
             # --- 神经网络推理层 (50Hz) ---
             if step_counter % DECIMATION == 0:
-                obs_np = get_observation(data, filtered_action, current_cmd) 
+                obs_np, hit_points = get_observation(model, data, filtered_action, current_cmd) 
                 obs_tensor = torch.from_numpy(obs_np).unsqueeze(0).to(device)
                 
                 with torch.no_grad():
@@ -197,6 +261,27 @@ def main():
             data.ctrl[7] = omega_right  
             
             mujoco.mj_step(model, data)
+            # =======================================================
+            # ★ 极其惊艳的可视化渲染：在画面里画出 441 个红点
+            # =======================================================
+            # 使用 viewer.lock() 锁住渲染线程，防止边画边渲染导致内存崩溃
+            with viewer.lock():
+                viewer.user_scn.ngeom = 0 # 每次清空上一帧的几何体
+                
+                if 'hit_points' in locals():
+                    for pt in hit_points:
+                        # 向渲染器强行塞入一个球体 (Sphere)
+                        mujoco.mjv_initGeom(
+                            viewer.user_scn.geoms[viewer.user_scn.ngeom],
+                            type=mujoco.mjtGeom.mjGEOM_SPHERE,
+                            size=np.array([0.015, 0, 0]), # 半径 1.5 厘米
+                            pos=pt,                       # 绝对坐标
+                            mat=np.eye(3).flatten(),      # 默认无旋转
+                            rgba=np.array([1, 0, 0, 1], dtype=np.float32) # 红色, 不透明度 1
+                        )
+                        viewer.user_scn.ngeom += 1
+            
+            # 同步画面
             viewer.sync()
             
             step_counter += 1

@@ -100,6 +100,159 @@ def main():
         "roll": [],
         "pitch": [],
         "cmd_vx": [],
+        "cmd_wz": [],
+        # 🌟 新增动作记录容器
+        "action_vx": [],
+        "action_wz": [],
+        "action_lf": [],
+        "action_rf": [],
+        "action_lh": [],
+        "action_rh": []
+    }
+    
+    obs, _ = env.get_observations()
+    robot_entity = env.unwrapped.scene["robot"]
+    dt = env.unwrapped.step_dt # 获取仿真步长 (通常 0.02s 或 0.04s)
+    sim_time = 0.0
+
+    print("\n" + "="*50)
+    print("Recording Data... Press ESC or Close Window to Finish")
+    print("="*50 + "\n")
+
+    while simulation_app.is_running():
+        if keyboard.stop_requested:
+            break
+            
+        with torch.inference_mode():
+            # 1. 覆盖指令
+            user_vel = torch.tensor(keyboard.cmd_vel, dtype=torch.float32, device=env.unwrapped.device).repeat(env.unwrapped.num_envs, 1)
+            try:
+                cmd_term = env.unwrapped.command_manager.get_term("base_velocity")
+                # 兼容 Isaac Lab 的不同版本命名
+                if hasattr(cmd_term, 'command'):
+                    cmd_term.command[:, 0] = user_vel[:, 0]  # vx
+                    cmd_term.command[:, 1] = user_vel[:, 1]  # vy
+                    
+                    # 只有当键盘有转向输入时，才覆盖系统的 wz 指令
+                    if keyboard.cmd_vel[2] != 0.0:
+                        cmd_term.command[:, 2] = user_vel[:, 2] 
+                        
+                elif hasattr(cmd_term, 'vel_command_b'):
+                    cmd_term.vel_command_b[:, 0] = user_vel[:, 0]
+                    cmd_term.vel_command_b[:, 1] = user_vel[:, 1]
+                    if keyboard.cmd_vel[2] != 0.0:
+                        cmd_term.vel_command_b[:, 2] = user_vel[:, 2]
+                else:
+                    print(f"警告: 找不到 command 属性。可用属性为: {dir(cmd_term)}")
+                    
+            except Exception as e:
+                print(f"覆盖指令时发生错误: {e}")
+            # 2. 推理与步进
+            actions = policy(obs)
+            obs, _, _, _ = env.step(actions)
+
+            # 3. 获取数据
+            root_quat = robot_entity.data.root_quat_w
+            roll, pitch, yaw = math_utils.euler_xyz_from_quat(root_quat)
+            r_deg = torch.rad2deg(roll[0]).item()
+            p_deg = torch.rad2deg(pitch[0]).item()
+            
+            # 4. === 记录数据 ===
+            logs["time"].append(sim_time)
+            logs["roll"].append(r_deg)
+            logs["pitch"].append(p_deg)
+            logs["cmd_vx"].append(keyboard.cmd_vel[0])
+            logs["cmd_wz"].append(keyboard.cmd_vel[2])
+            
+            # 🌟 记录模型输出 (剥离并转成标量)
+            logs["action_vx"].append(actions[0, 0].item())
+            logs["action_wz"].append(actions[0, 1].item())
+            logs["action_lf"].append(actions[0, 2].item())
+            logs["action_rf"].append(actions[0, 3].item())
+            logs["action_lh"].append(actions[0, 4].item())
+            logs["action_rh"].append(actions[0, 5].item())
+            
+            sim_time += dt
+
+            print(f"\r[Rec] T:{sim_time:.1f}s | Pitch:{p_deg:6.2f}° | Roll:{r_deg:6.2f}°", end="")
+
+    env.close()
+    
+    # === 绘图逻辑 (在仿真关闭后运行) ===
+    print("\n\nGenerating plots...")
+    
+    # 🌟 修改绘图布局：变为 3 个子图
+    plt.style.use('ggplot')
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(10, 12), sharex=True)
+    
+    # 子图1: 姿态角
+    ax1.plot(logs["time"], logs["pitch"], label='Pitch (deg)', color='orange', linewidth=1.5)
+    ax1.plot(logs["time"], logs["roll"], label='Roll (deg)', color='green', linewidth=1.5)
+    ax1.set_ylabel('Angle (degrees)')
+    ax1.set_title('Robot Attitude Response')
+    ax1.legend()
+    ax1.grid(True)
+
+    # 子图2: 键盘指令与速度输出动作
+    ax2.plot(logs["time"], logs["cmd_vx"], label='Command Vx (m/s)', color='blue', linestyle='--')
+    ax2.plot(logs["time"], logs["cmd_wz"], label='Command YawRate (rad/s)', color='red', linestyle='--')
+    ax2.plot(logs["time"], logs["action_vx"], label='Action Vx', color='cyan', linewidth=1.5)
+    ax2.plot(logs["time"], logs["action_wz"], label='Action Wz', color='magenta', linewidth=1.5)
+    ax2.set_ylabel('Velocity / Action')
+    ax2.set_title('Velocity Commands & Output')
+    ax2.legend()
+    ax2.grid(True)
+    
+    # 子图3: 🌟 腿部悬挂动作 (LF, RF, LH, RH)
+    ax3.plot(logs["time"], logs["action_lf"], label='Leg LF', color='red', linewidth=1.0)
+    ax3.plot(logs["time"], logs["action_rf"], label='Leg RF', color='blue', linewidth=1.0)
+    ax3.plot(logs["time"], logs["action_lh"], label='Leg LH', color='green', linewidth=1.0)
+    ax3.plot(logs["time"], logs["action_rh"], label='Leg RH', color='purple', linewidth=1.0)
+    ax3.set_ylabel('Leg Position Action')
+    ax3.set_xlabel('Time (s)')
+    ax3.set_title('Active Suspension Outputs')
+    ax3.legend()
+    ax3.grid(True)
+    
+    # 保存图片
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    save_path = os.path.join(resume_path, f"robot_states_{timestamp}.png")
+    plt.tight_layout() # 防止图表重叠
+    plt.savefig(save_path)
+    print(f"[INFO] Plot saved to: {os.path.abspath(save_path)}")
+    
+    # 显示图片
+    plt.show()
+    
+    simulation_app.close()
+    
+    '''
+    # 路径处理
+    agent_cfg = load_cfg_from_registry(args_cli.task, "rsl_rl_cfg_entry_point")
+    if hasattr(agent_cfg, "to_dict"): agent_cfg_dict = agent_cfg.to_dict()
+    else: agent_cfg_dict = agent_cfg
+
+    if os.path.exists(args_cli.load_run):
+        resume_path = os.path.abspath(args_cli.load_run)
+    else:
+        log_root_path = os.path.join("logs", "rsl_rl", agent_cfg_dict["experiment_name"])
+        resume_path = os.path.join(os.path.abspath(log_root_path), args_cli.load_run)
+    
+    checkpoint_path = os.path.join(resume_path, args_cli.checkpoint)
+    print(f"Loading checkpoint: {checkpoint_path}")
+
+    ppo_runner = OnPolicyRunner(env, agent_cfg_dict, log_dir=None, device=env_cfg.sim.device)
+    ppo_runner.load(checkpoint_path)
+    policy = ppo_runner.get_inference_policy(device=env.unwrapped.device)
+
+    keyboard = KeyboardController(speed_scale=1.0, rot_scale=0.5)
+    
+    # === 数据记录容器 ===
+    logs = {
+        "time": [],
+        "roll": [],
+        "pitch": [],
+        "cmd_vx": [],
         "cmd_wz": []
     }
     
@@ -196,6 +349,7 @@ def main():
     plt.show()
     
     simulation_app.close()
+    '''
 
 if __name__ == "__main__":
     main()

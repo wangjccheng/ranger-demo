@@ -10,7 +10,7 @@ from scipy.spatial.transform import Rotation as R
 # ==========================================
 # 1. 基础配置参数
 # ==========================================
-POLICY_PATH = "/home/wjc/robot1/jit_models/policy_4.pt" 
+POLICY_PATH = "/home/wjc/robot1/jit_models/policy_3.5.pt" 
 XML_PATH = "/home/wjc/mujoco-3.5.0/urdf/xml/ranger2.xml"             
 
 SIM_DT = 0.002           

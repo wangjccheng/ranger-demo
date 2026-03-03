@@ -9,7 +9,7 @@ class CNNActorCriticRecurrent(ActorCriticRecurrent):
                  init_noise_std=1.0, **kwargs):
         
         # 你的雷达网格是 2m x 2m, res=0.1, 所以固定是 20x20 = 400 个点
-        self.num_height_points = 441
+        self.num_height_points = 625
         
         # CNN 降维后的潜变量维度
         self.latent_dim = 32
@@ -47,7 +47,8 @@ class CNNActorCriticRecurrent(ActorCriticRecurrent):
             nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, stride=2, padding=1),
             nn.ELU(),
             nn.Flatten(),
-            nn.Linear(32 * 6 * 6, self.latent_dim), # 这里把 5*5 改成了 6*6
+            # ★ 核心修改：输入 25x25 经过两层 stride=2 的卷积后，特征图变成了 7x7
+            nn.Linear(32 * 7 * 7, self.latent_dim), 
             nn.ELU()
         )
 
@@ -56,7 +57,7 @@ class CNNActorCriticRecurrent(ActorCriticRecurrent):
         height_map = obs[..., -self.num_height_points:]
         
         # 展平输入 CNN
-        height_map_2d = height_map.reshape(-1, 1, 21, 21)
+        height_map_2d = height_map.reshape(-1, 1, 25, 25)
         latent_terrain = self.cnn_encoder(height_map_2d)
         
         # ★ 显式根据输入维度还原形状，避免 trace 追踪时出现动态解包错误

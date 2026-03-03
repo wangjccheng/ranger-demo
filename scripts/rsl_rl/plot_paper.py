@@ -28,7 +28,7 @@ palette = {
 
 # 加载数据
 try:
-    df = pd.read_csv("/home/wjc/robot1/data/paper_experiments_data.csv")
+    df = pd.read_csv("/home/wjc/robot1/data/mujoco_experiments_data.csv")
 except FileNotFoundError:
     print("Error: 找不到 paper_experiments_data1.csv。请先运行 evaluate_paper.py！")
     exit()
