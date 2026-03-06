@@ -32,7 +32,7 @@ def leg_pos_center_l2(env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot", j
 def leg_vel_l2(env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot", joint_names="g_.*")) -> torch.Tensor:
     """调距关节速度惩罚（平方和）。"""
     return torch.sum(mdp.joint_vel(env, asset_cfg)**2, dim=1)
-
+'''
 def slip_consistency_l2(
     env,
     wheel_cfg: SceneEntityCfg = SceneEntityCfg("robot", joint_names="w_.*"),
@@ -54,7 +54,7 @@ def slip_consistency_l2(
     dv2 = (v_hat - v_b)**2
     dw2 = (w_hat - w_b)**2
     return dv2 + dw2
-
+'''
 # 可选：姿态/重力投影的“水平”奖励已由内置 flat_orientation_l2/ang_vel_xy_l2 覆盖 [4]。
 def feet_air_time_l2(
     env,
@@ -101,6 +101,20 @@ def log_base_pitch(env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> 
 # ---------------------------
 # 奖励配置（与动作/命令对齐）
 # ---------------------------
+def residual_mean_penalty(env, residual_indices: list = [2, 3, 4, 5]) -> torch.Tensor:
+    """
+    零和残差约束：惩罚残差的均值不为0。
+    强迫神经网络把残差纯粹当作“差速器”来用，不允许用它来整体提速或减速。
+    """
+    # 提取四个残差
+    residuals = env.action_manager.action[:, residual_indices]
+    
+    # 计算均值
+    mean_residual = torch.mean(residuals, dim=1)
+    
+    # 惩罚均值的平方
+    return mean_residual**2
+
 
 def flat_orientation_with_tolerance(
     env: ManagerBasedRLEnv, 
@@ -133,6 +147,99 @@ def flat_orientation_with_tolerance(
     # 注意：IsaacLab 的 RewTerm 会自动处理 batch 维度，通常返回 [N]
     return excess_tilt ** 2
 
+def true_wheel_slip_l2_with_deadzone(
+    env,
+    wheel_body_names: list = ["w_lf", "w_rf", "w_lb", "w_rb"],
+    wheel_radius: float = 0.19,
+    slip_tolerance: float = 0.1,  # 允许的合法滑移死区 (m/s)
+) -> torch.Tensor:
+    """
+    终极物理打滑惩罚 (致敬你的物理直觉！)：
+    通过提取机身坐标系下 X-Z 平面的合成速度，完美还原轮子沿地形切线的真实滚动速度。
+    """
+    asset = env.scene["robot"]
+    
+    body_ids, _ = asset.find_bodies(wheel_body_names)
+    joint_ids, _ = asset.find_joints(wheel_body_names)
+    
+    # 1. 理想前向线速度 (如果之前确认方向同向，直接相乘)
+    omega = asset.data.joint_vel[:, joint_ids]
+    ideal_forward_vel = omega * wheel_radius
+    
+    # 2. 获取轮芯在世界系下的真实线速度 [N, 4, 3]
+    vel_w = asset.data.body_lin_vel_w[:, body_ids, :]
+    
+   # 3. 将世界速度转换到【机身坐标系(Base Frame)】
+    base_quat = asset.data.root_quat_w.unsqueeze(1).expand(-1, len(body_ids), -1)
+    
+    # 使用官方推荐的高效新函数 quat_apply_inverse 替换 quat_rotate_inverse
+    vel_b = math_utils.quat_apply_inverse(
+        base_quat.reshape(-1, 4), 
+        vel_w.reshape(-1, 3)
+    ).reshape(-1, len(body_ids), 3)
+    
+    # ★ 4. 核心修正：计算 X-Z 平面的合成速度 (即沿地形切线的真实滚动速度)
+    # 提取 X 分量和 Z 分量
+    vel_b_x = vel_b[:, :, 0]
+    vel_b_z = vel_b[:, :, 2]
+    
+    # 勾股定理求合成速度的大小，并用 sign(vel_b_x) 赋予其正确的前进/后退方向
+    real_forward_vel = torch.sign(vel_b_x) * torch.sqrt(vel_b_x**2 + vel_b_z**2)
+    
+    # 5. 计算速度差的绝对值
+    slip_error = torch.abs(real_forward_vel - ideal_forward_vel)
+    
+    # 6. 引入死区：只惩罚超出 tolerance 的打滑部分 (包容正常转弯时的横向拖拽导致的速度损耗)
+    excess_slip = torch.clamp(slip_error - slip_tolerance, min=0.0)
+    
+    # 7. 平方惩罚
+    slip_penalty = torch.sum(excess_slip**2, dim=1)
+    
+    return slip_penalty
+    
+
+def lateral_slip_l2_with_kinematic_deadzone(
+    env,
+    wheel_body_names: list = ["w_lf", "w_rf", "w_lb", "w_rb"],
+    base_tolerance: float = 0.02,      # 基础死区
+    kinematic_coef: float = 0.5,       # 运动学补偿：直接填入机器人的半轴距 (Half Wheelbase，单位：米)
+) -> torch.Tensor:
+    """
+    针对低速速差转向的横向侧滑惩罚：
+    仅补偿纯运动学旋转带来的强制侧滑，严厉打击任何不合理的横向滑动。
+    """
+    asset = env.scene["robot"]
+    body_ids, _ = asset.find_bodies(wheel_body_names)
+    
+    # 1. 获取速度并转到机身坐标系
+    vel_w = asset.data.body_lin_vel_w[:, body_ids, :]
+    base_quat = asset.data.root_quat_w.unsqueeze(1).expand(-1, len(body_ids), -1)
+    vel_b = math_utils.quat_apply_inverse(
+        base_quat.reshape(-1, 4), 
+        vel_w.reshape(-1, 3)
+    ).reshape(-1, len(body_ids), 3)
+    
+    # 2. 提取横向侧滑速度 (Y轴)
+    vel_b_y = vel_b[:, :, 1]
+    lateral_slip_error = torch.abs(vel_b_y)
+    
+    # 3. 提取机身偏航角速度 (Yaw Rate)
+    base_ang_vel_w = asset.data.root_ang_vel_w
+    base_ang_vel_b = math_utils.quat_apply_inverse(asset.data.root_quat_w, base_ang_vel_w)
+    yaw_rate = torch.abs(base_ang_vel_b[:, 2])  # [N]
+    
+    # 4. 计算纯运动学动态死区
+    # 死区 = 基础容忍度 + (半轴距 * 旋转角速度)
+    dynamic_tolerance = base_tolerance + kinematic_coef * yaw_rate
+    dynamic_tolerance = dynamic_tolerance.unsqueeze(1) # [N, 1] 以对齐 4 个轮子
+    
+    # 5. 应用死区并进行平方惩罚
+    excess_lateral_slip = torch.clamp(lateral_slip_error - dynamic_tolerance, min=0.0)
+    lateral_slip_penalty = torch.sum(excess_lateral_slip**2, dim=1)
+    
+    return lateral_slip_penalty
+
+
 @configclass
 class SkidSteerLegRewardsCfg:
     """
@@ -150,7 +257,7 @@ class SkidSteerLegRewardsCfg:
     track_ang_vel_z_exp = RewTerm(
         func=mdp.rewards.track_ang_vel_z_exp,
         params={"command_name": "base_velocity", "std": 0.5},
-        weight=1.5,
+        weight=2.0,
     )
 
     # 2) 车身稳定/抑制弹跳 [4]
@@ -169,7 +276,7 @@ class SkidSteerLegRewardsCfg:
         params={"asset_cfg": SceneEntityCfg("robot", joint_names="g_.*")},
         weight=-0.02,
     )
-
+    '''
     # 4) 打滑一致性（自定义）=
     slip_consistency = RewTerm(
         func=slip_consistency_l2,
@@ -179,6 +286,34 @@ class SkidSteerLegRewardsCfg:
             "wheel_radius": 0.05,  # 与动作项 wheel_radius 一致
         },
         weight=-20,
+    )
+    '''
+    
+    # ★ 新增：真实物理打滑/空转惩罚
+    true_wheel_slip = RewTerm(
+        func=true_wheel_slip_l2_with_deadzone,
+        params={
+            "wheel_body_names": ["w_lf", "w_rf", "w_lb", "w_rb"],
+            "wheel_radius": 0.19, 
+            "slip_tolerance": 0.2
+        },
+        weight=-1.0,  # 这里的权重不需要像之前 -20 那么极端，-2 到 -5 之间就足够让它学会踩地了
+    )
+    
+    true_wheel_slip2 = RewTerm(
+        func=lateral_slip_l2_with_kinematic_deadzone,
+        params={
+            "wheel_body_names": ["w_lf", "w_rf", "w_lb", "w_rb"],
+            "base_tolerance": 0.02, 
+            "kinematic_coef": 0.5
+        },
+        weight=-1.0,  # 这里的权重不需要像之前 -20 那么极端，-2 到 -5 之间就足够让它学会踩地了
+    )
+    
+    residual_mean_pen = RewTerm(
+        func=residual_mean_penalty,
+        params={"residual_indices": [2, 3, 4, 5]},
+        weight=-1.0, 
     )
 
     # 5) 能耗与控制平滑 [4]

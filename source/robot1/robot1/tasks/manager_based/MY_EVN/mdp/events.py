@@ -11,8 +11,8 @@ class SkidSteerLegEventsCfg:
         params={
             # 匹配全部“车轮刚体”，示例正则请按你的模型改：如 ".*wheel.*link" 或 "w_.*"
             "asset_cfg": SceneEntityCfg("robot", body_names=["w_.*"]),
-            "static_friction_range": (0.4, 0.8),
-            "dynamic_friction_range": (0.3, 0.7),
+            "static_friction_range": (0.45, 0.85),
+            "dynamic_friction_range": (0.35, 0.75),
             "restitution_range": (0.0, 0.05),
             "num_buckets": 16,
             "make_consistent": True,  # 动摩擦<=静摩擦 [2]
@@ -137,8 +137,8 @@ class SkidSteerLegEventsCfg:
     push_robot = EventTerm(
         func=mdp.push_by_setting_velocity,  # 速度脉冲（比力更简洁稳定）[2]
         mode="interval",
-        interval_range_s=(8.0, 15.0),      # 每 8–12 s 触发一次（每个 env 独立计时）[18]
-        params={"velocity_range": {"x": (-0.2, 0.2), "y": (-0.0, 0.0), "yaw": (-0.1, 0.1)}},
+        interval_range_s=(8.0, 10.0),      # 每 8–12 s 触发一次（每个 env 独立计时）[18]
+        params={"velocity_range": {"x": (-0.1, 0.1), "y": (-0.0, 0.0), "yaw": (-0.05, 0.05)}},
     )
 
     # 可选：全局重力轻微随机化（不分 env；建议仅在鲁棒性实验中打开）[2]

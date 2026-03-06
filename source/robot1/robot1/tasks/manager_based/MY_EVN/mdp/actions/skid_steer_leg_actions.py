@@ -34,14 +34,20 @@ class SkidSteerLegAction(ActionTerm):
         self._leg_offset = float(cfg.leg_offset)
         self._bounding_strategy = getattr(cfg, "bounding_strategy", "clip")
         self._no_reverse = bool(getattr(cfg, "no_reverse", False))
+        
 
-        # 3. 物理迟滞模拟参数 (低通滤波器系数 alpha)
+         # 3. 物理迟滞模拟参数 (低通滤波器系数 alpha)
         # 数值越小，物理惯性/建压延迟越明显；1.0代表没有延迟
         self.actuator_lag_alpha = getattr(cfg, "actuator_lag_alpha", 0.8) 
         self.eha_lag_alpha      = getattr(cfg, "eha_lag_alpha", 0.6)
 
+        # ★ 新增：残差缩放系数 (Residual Scale)，最大允许神经网络微调 ±5 rad/s
+        self._residual_scale = getattr(cfg, "residual_scale", 5.0)
+
+        # ★ 修改：动作维度 = 2 (主线速度v,角速度w) + 4 (四个轮子的残差) + N (腿部数量)
+        self._action_dim = 2 + 4 + len(self._leg_ids)
+        
         # 4. 运行时缓存
-        self._action_dim = 2 + len(self._leg_ids)
         self._raw_actions = torch.zeros(self.num_envs, self._action_dim, device=self.device)
         self._processed_actions = torch.zeros_like(self._raw_actions)
         
@@ -128,20 +134,65 @@ class SkidSteerLegAction(ActionTerm):
         # ==========================================================
         # 解析指令 (使用 delayed_actions 替代原来的 actions)
         # ==========================================================
-        # 1. 解析底盘指令 (V, Omega)
+       # ==========================================================
+        # ★ 解析指令 (切片维度变了)
+        # ==========================================================
+        # 1. 解析底盘主指令 (V, Omega) -> 索引 0, 1
         base_raw = delayed_actions[:, :2]
         base_cmd = base_raw * self._base_scale + self._base_offset
         base_cmd = self._bound_base_cmd(base_cmd)
         if self._no_reverse:
             base_cmd[:, 0] = torch.clamp(base_cmd[:, 0], min=0.0)
 
-        # 2. 解析腿部指令 (解析为期望到达的目标位置 Position)
-        leg_raw = delayed_actions[:, 2:]
+        # ★ 2. 解析四个轮子的残差 (Residuals) -> 索引 2, 3, 4, 5
+        residual_raw = delayed_actions[:, 2:6]
+        residual_cmd = residual_raw * self._residual_scale  # 映射到真实的角速度偏差值
+
+        # 3. 解析腿部指令 (Position) -> 索引 6 之后
+        leg_raw = delayed_actions[:, 6:]
         leg_cmd = leg_raw * self._leg_scale + self._leg_offset
 
+        # 存入 _processed_actions
         self._processed_actions[:, :2] = base_cmd
-        self._processed_actions[:, 2:] = leg_cmd
+        self._processed_actions[:, 2:6] = residual_cmd
+        self._processed_actions[:, 6:] = leg_cmd
+        
+        
+    def apply_actions(self):
+        # 第一步：获取处理后的指令
+        v = self._processed_actions[:, 0]
+        omega = self._processed_actions[:, 1]
+        
+        # ★ 获取 4 个轮子的残差 (按照左前、左后、右前、右后的顺序，这取决于你的 _all_wheel_ids 顺序)
+        residuals = self._processed_actions[:, 2:6] 
+        
+        leg_pos_target = self._processed_actions[:, 6:]
 
+        # 第二步：计算理想的 2D 基础转速 (基础运动学)
+        wl = (v - omega * (self.W / 2.0)) / self.r
+        wr = (v + omega * (self.W / 2.0)) / self.r
+        
+        nL, nR = len(self._left_ids), len(self._right_ids)
+        # 基础转速矩阵拼接 [N, 4]
+        base_wheel_vel = torch.cat([wl.view(-1, 1).expand(-1, nL), wr.view(-1, 1).expand(-1, nR)], dim=1)
+        
+        # ★ 第三步：引入残差！(真实的期望转速 = 基础转速 + 神经网络独立微调的残差)
+        wheel_vel_target = base_wheel_vel + residuals
+
+        # 第四步：物理迟滞模拟 (Low Pass Filter) -> 使用加上残差后的 target 进行滤波
+        wheel_vel_cmd = (self.actuator_lag_alpha * wheel_vel_target + 
+                         (1 - self.actuator_lag_alpha) * self._prev_wheel_vel_cmd).detach()
+        
+        leg_pos_cmd   = (self.eha_lag_alpha * leg_pos_target + 
+                         (1 - self.eha_lag_alpha) * self._prev_leg_pos_cmd).detach()
+        
+        # 更新历史缓存并下发给引擎
+        self._prev_wheel_vel_cmd[:] = wheel_vel_cmd
+        self._prev_leg_pos_cmd[:]   = leg_pos_cmd
+        self._asset.set_joint_velocity_target(wheel_vel_cmd, joint_ids=self._all_wheel_ids)
+        self._asset.set_joint_position_target(leg_pos_cmd, joint_ids=self._leg_ids)
+        
+        '''
     def apply_actions(self):
         """
         [Sim2Real 核心] 物理执行层：结合隐式控制与低通延迟
@@ -171,5 +222,5 @@ class SkidSteerLegAction(ActionTerm):
         # 第三步：下发给物理引擎底层 
         self._asset.set_joint_velocity_target(wheel_vel_cmd, joint_ids=self._all_wheel_ids)
         self._asset.set_joint_position_target(leg_pos_cmd, joint_ids=self._leg_ids)
-
+        '''
 

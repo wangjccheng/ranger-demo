@@ -34,13 +34,13 @@ def masked_height_scan(env, sensor_cfg: SceneEntityCfg, mask_region: str = "side
         # --- 参数定义区（可根据真实机器人的长宽微调） ---
         # 1. 前后轮之间的范围 (X轴，行)
         # 假设前后轮之间总长 0.8m，即中心前后各 0.4m (4个格子)
-        x_start = center - 4  # 索引 6
-        x_end = center + 4    # 索引 14
+        x_start = center - 5  # 索引 6
+        x_end = center + 5    # 索引 14
         
         # 2. 从两侧轮子向外的范围 (Y轴，列)
         # 轮距是 0.5m，即中心左右各 0.25m (2.5个格子)。我们从第3个格子开始向外抹黑
-        y_right_end = center - 6  # 索引 0 到 7 (右侧向外)
-        y_left_start = center + 6 # 索引 13 到 20 (左侧向外)
+        y_right_end = center - 4  # 索引 0 到 7 (右侧向外)
+        y_left_start = center + 4 # 索引 13 到 20 (左侧向外)
 
         # --- 执行切片抹黑 (赋值为 -2.0) ---
         # 抹黑一侧的方块
@@ -59,7 +59,7 @@ def masked_height_scan(env, sensor_cfg: SceneEntityCfg, mask_region: str = "side
         grid_h[mask] = -2.0
 
     return grid_h.view(N, -1)
-
+'''
 def slip_features(env,
                   wheel_cfg: SceneEntityCfg = SceneEntityCfg("robot", joint_names="w.*"),
                   base_width: float = 0.5,
@@ -86,7 +86,7 @@ def slip_features(env,
     dw = w_hat - w_b
     
     return torch.stack([v_hat, w_hat, dv, dw, dv.abs(), dw.abs()], dim=-1)
-
+'''
 def cmd_vel_2d(env, command_name: str = "base_velocity") -> torch.Tensor:
     """提取 2D 速度指令 (v_x, ω_z)"""
     cmd = mdp.generated_commands(env, command_name)
@@ -182,10 +182,10 @@ class SkidSteerLegObsCfg:
         #leg_pos_norm = ObsTerm(func=leg_pos_normalized, params={"asset_cfg": SceneEntityCfg("robot", joint_names="g_.*")})
         
         cmd_vw = ObsTerm(func=cmd_vel_2d, params={"command_name": "base_velocity"})
-        last_action = ObsTerm(func=mdp.last_action)
+        last_action = ObsTerm(func=mdp.last_action, clip=(-1, 1))
 
         # 【改进】特权物理特征：精确的打滑数据，只给 Critic 用来算 Value
-        slip_feat = ObsTerm(func=slip_features, params={"wheel_cfg": SceneEntityCfg("robot", joint_names="w_.*"), "base_width": 0.5, "wheel_radius": 0.05})
+        #slip_feat = ObsTerm(func=slip_features, params={"wheel_cfg": SceneEntityCfg("robot", joint_names="w_.*"), "base_width": 0.5, "wheel_radius": 0.05})
 
         # --- 特权外界感知 ---
         # Critic 看到无盲区、无噪声的高度图

@@ -8,7 +8,7 @@ from scipy.spatial.transform import Rotation as R
 # ==========================================
 # 1. 基础配置参数
 # ==========================================
-POLICY_PATH = "/home/wjc/robot1/jit_models/policy_5.pt" # 请确保路径和文件名正确
+POLICY_PATH = "/home/wjc/robot1/jit_models/policy_6.pt" # 请确保路径和文件名正确
 XML_PATH = "/home/wjc/mujoco-3.5.0/urdf/xml/ranger2.xml"             
 
 SIM_DT = 0.002           
@@ -17,10 +17,10 @@ DECIMATION = int(POLICY_DT / SIM_DT)
 
 # 运动学与动作缩放参数
 LEG_POS_SCALE = 0.3  # URDF 极限 0.35 * 软限位 0.7 = 0.245
-BASE_WIDTH = 0.5       
-WHEEL_RADIUS = 0.05    
+BASE_WIDTH = 0.68       
+WHEEL_RADIUS = 0.19    
 ACTION_ALPHA = 0.3     
-
+RESIDUAL_SCALE = 5
 # 默认状态
 DEFAULT_LEG_POS = 0.05 
 
@@ -36,7 +36,7 @@ def get_real_height_scan(model, data):
     yaw = r.as_euler('zyx')[0]
     cos_yaw, sin_yaw = np.cos(yaw), np.sin(yaw)
 
-    grid_points = np.linspace(-1.0, 1.0, 21)
+    grid_points = np.linspace(-1.0, 1.0, 25)
     lx, ly = np.meshgrid(grid_points, grid_points, indexing='xy')
     lx_flat = lx.flatten()
     ly_flat = ly.flatten()
@@ -44,15 +44,20 @@ def get_real_height_scan(model, data):
     world_x = base_pos[0] + lx_flat * cos_yaw - ly_flat * sin_yaw
     world_y = base_pos[1] + lx_flat * sin_yaw + ly_flat * cos_yaw
 
-    height_scan = np.zeros(441, dtype=np.float32)
-    hit_points = np.zeros((441, 3), dtype=np.float32) # ★ 新增：用于保存绝对坐标
+    height_scan = np.zeros(625, dtype=np.float32)
+    hit_points = np.zeros((625, 3), dtype=np.float32) 
     geomid = np.zeros(1, dtype=np.int32)
-    body_exclude_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "base_link")
+    
+    # ★ 新增：定义一个射线过滤器。数组长度必须为6。
+    # [1, 0, 0, 0, 0, 0] 代表：只检测第 0 层，忽略第 1~5 层
+    ray_group = np.array([1, 0, 0, 0, 0, 0], dtype=np.uint8)
 
-    for i in range(441):
+    for i in range(625):
         pnt = np.array([world_x[i], world_y[i], 2.0], dtype=np.float64)
         vec = np.array([0.0, 0.0, -1.0], dtype=np.float64)
-        dist = mujoco.mj_ray(model, data, pnt, vec, None, 1, body_exclude_id, geomid)
+        
+        # ★ 修改：传入 ray_group 过滤器，并将 body_exclude 参数设为 -1 (不使用 Body 排除)
+        dist = mujoco.mj_ray(model, data, pnt, vec, ray_group, 1, -1, geomid)
         
         if dist > 0:
             hit_z = 2.0 - dist
@@ -60,11 +65,10 @@ def get_real_height_scan(model, data):
             hit_z = -1.0
             
         height_scan[i] = hit_z - base_pos[2]
-        
-        # ★ 新增：保存击中点的物理世界坐标（为了防止红点被埋在地里，Z轴稍微抬高 2 厘米）
         hit_points[i] = [world_x[i], world_y[i], hit_z + 0.02] 
         
-    return height_scan, hit_points # ★ 修改：同时返回相对高度和绝对坐标点
+    return height_scan, hit_points
+
 def generate_wavy_terrain(model):
     """
     在内存中直接修改 hfield 数据，生成正弦波浪地形
@@ -147,6 +151,17 @@ def main():
     model = mujoco.MjModel.from_xml_path(XML_PATH)
     # ★ 注入波浪地形
     generate_wavy_terrain(model)
+    # =======================================================
+    # ★ 新增：将机器人和地形的射线检测层分开
+    # =======================================================
+    for i in range(model.ngeom):
+        # 如果所属的 body_id 是 0 (worldbody，即地面和波浪地形)
+        if model.geom_bodyid[i] == 0:
+            model.geom_group[i] = 0  # 留在第 0 层
+        else:
+            # 机器人身上的所有几何体，全部赶到第 1 层
+            model.geom_group[i] = 1
+            
     data = mujoco.MjData(model)
     model.opt.timestep = SIM_DT
 
@@ -159,10 +174,42 @@ def main():
     # GRU 通常是 (1, 128) 或 (1, 1, 128)
     hidden_state = torch.zeros((1, 1, 128), dtype=torch.float32, device=device) 
     
-    raw_action = np.zeros(6, dtype=np.float32)      
-    filtered_action = np.zeros(6, dtype=np.float32) 
+    raw_action = np.zeros(10, dtype=np.float32)      
+    filtered_action = np.zeros(10, dtype=np.float32) 
+# ★ 1. 新增：定义暂停状态和运动指令
+    paused = False
+    cmd_x = 0.0    # 初始线速度 (默认停在原地)
+    cmd_yaw = 0.0  # 初始角速度
+
+    def key_callback(keycode):
+        nonlocal paused, cmd_x, cmd_yaw
+        
+        if keycode == 32:  # 空格键 (Space): 暂停 / 继续
+            paused = not paused
+            
+        elif keycode == 265:  # ⬆️ 向上箭头 (Up Arrow): 增加前进速度
+            cmd_x += 0.2
+        elif keycode == 264:  # ⬇️ 向下箭头 (Down Arrow): 减少前进速度 / 后退
+            cmd_x -= 0.2
+            
+        elif keycode == 263:  # ⬅️ 向左箭头 (Left Arrow): 左转
+            cmd_yaw += 0.2
+        elif keycode == 262:  # ➡️ 向右箭头 (Right Arrow): 右转
+            cmd_yaw -= 0.2
+            
+        elif keycode == 257:  # ⏎ 回车键 (Enter): 紧急刹车
+            cmd_x = 0.0
+            cmd_yaw = 0.0
+            
+        # 安全限制：防止多次按键导致指令爆炸
+        cmd_x = np.clip(cmd_x, -1.0, 1.0)
+        cmd_yaw = np.clip(cmd_yaw, -0.5, 0.5)
+        
+        # 打印当前指令
+        if keycode != 32: 
+            print(f"当前指令 -> 线速度: {cmd_x:.1f} m/s, 角速度: {cmd_yaw:.1f} rad/s")
     
-    with mujoco.viewer.launch_passive(model, data) as viewer:
+    with mujoco.viewer.launch_passive(model, data,key_callback=key_callback) as viewer:
         
         # ----------------------------------------------------
         # ★ 物理引擎冷启动配置：消除开机抽搐
@@ -181,14 +228,19 @@ def main():
         while viewer.is_running():
             step_start = time.time()
             
+            if paused:
+                viewer.sync()
+                time.sleep(model.opt.timestep) # 稍微休眠，防止死循环跑满 CPU
+                continue
+            
             # =======================================================
             # ★ 核心修复：监听 Reset 事件，对大脑和物理姿态进行“彻底洗脑”
             # =======================================================
             if data.time == 0.0:
                 # 1. 清空 GRU 记忆和动作滤波器
                 hidden_state = torch.zeros((1, 1, 128), dtype=torch.float32, device=device)
-                raw_action = np.zeros(6, dtype=np.float32)
-                filtered_action = np.zeros(6, dtype=np.float32)
+                raw_action = np.zeros(10, dtype=np.float32)
+                filtered_action = np.zeros(10, dtype=np.float32)
                 
                 # 2. 重新把腿掰回默认角度 (应对 Viewer 的暴力归零)
                 data.qpos[7] = DEFAULT_LEG_POS   # LB
@@ -221,7 +273,7 @@ def main():
             # =======================================================
             # --- 1.5 秒后，正常接管控制逻辑 ---
             # =======================================================
-            current_cmd = np.array([2.0, 0.0, 0.0], dtype=np.float32)
+            current_cmd = np.array([cmd_x, 0.0, cmd_yaw], dtype=np.float32)
             
             # --- 神经网络推理层 (50Hz) ---
             if step_counter % DECIMATION == 0:
@@ -237,7 +289,8 @@ def main():
                 # 动作解包
                 cmd_v_x = filtered_action[0] * BASE_LIN_VEL_SCALE      
                 cmd_omega_z = filtered_action[1] * BASE_ANG_VEL_SCALE
-                
+                residual_raw = filtered_action[2:6]
+                residual_cmd = residual_raw * RESIDUAL_SCALE
                 v_left = cmd_v_x - cmd_omega_z * (BASE_WIDTH / 2.0)
                 v_right = cmd_v_x + cmd_omega_z * (BASE_WIDTH / 2.0)
                 
@@ -255,10 +308,11 @@ def main():
             data.ctrl[2] = target_RF
             data.ctrl[3] = target_RB  
             
-            data.ctrl[4] = omega_left   
-            data.ctrl[5] = omega_left   
-            data.ctrl[6] = omega_right  
-            data.ctrl[7] = omega_right  
+            data.ctrl[4] = omega_left+residual_cmd[0]
+            data.ctrl[5] = omega_left+residual_cmd[1]
+            data.ctrl[6] = omega_right+residual_cmd[2]
+            data.ctrl[7] = omega_right+residual_cmd[3]   
+ 
             
             mujoco.mj_step(model, data)
             # =======================================================

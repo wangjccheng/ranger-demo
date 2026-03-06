@@ -141,13 +141,13 @@ class CommandsCfg:
     base_velocity = mdp.UniformVelocityCommandCfg(
         asset_name="robot",
         resampling_time_range=(6.0, 6.0),
-        rel_standing_envs=0.15,
-        rel_heading_envs=0.3,
+        rel_standing_envs=0.1,
+        rel_heading_envs=0.4,
         heading_command=True,
         heading_control_stiffness=1.0,
         debug_vis=True,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(-1.5, 1.5), lin_vel_y=(0, 0), ang_vel_z=(-0.8, 0.8), heading=(-math.pi, math.pi)
+            lin_vel_x=(-0.9, 0.9), lin_vel_y=(0, 0), ang_vel_z=(-0.45, 0.45), heading=(-math.pi, math.pi)
         ),
     )
 
@@ -208,7 +208,7 @@ class ROBOT1RoughEnvCfg(ManagerBasedRLEnvCfg):
         # simulation settings
         
         self.viewer.eye = (-50.0, 0.0, 6.0)       # 相机放高、放远一点
-        self.viewer.look_at = (-1.0, 0.0, -1.5)   # 看向机器人附近
+        self.viewer.look_at = (-1.0, 0.0, -2.5)   # 看向机器人附近
         
         self.sim.dt = 0.002
         self.sim.render_interval = self.decimation

@@ -171,9 +171,9 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "track_lin_vel_xy_exp", 
             "param_name": "std",
-            "start_val": 0.5,           # 初始：允许 ±1m/s 的误差仍有较高奖励
+            "start_val": 1.0,           # 初始：允许 ±1m/s 的误差仍有较高奖励
             "end_val": 0.2,             # 最终：必须非常精准 (您原本的设定)
-            "total_steps": 1.1e5,       # 在 2亿步(约一半训练程)内完成收紧
+            "total_steps": 2.4e5,       # 在 2亿步(约一半训练程)内完成收紧
         },
     )
     
@@ -183,9 +183,9 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "track_ang_vel_z_exp",
             "param_name": "std",
-            "start_val": 0.5,
+            "start_val": 1.0,
             "end_val": 0.2, 
-            "total_steps": 1.1e5,
+            "total_steps": 2.4e5,
         },
     )
     anneal_flat_orientation_penalty = CurrTerm(
@@ -193,21 +193,52 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "flat_orientation_l2",  # 对应 rewards 配置中的名字
             "start_weight": 0.0,                # 初期：轻微惩罚，允许它歪歪扭扭地跑
-            "end_weight": -1000.0,                # 后期：重罚，强迫它收敛到水平姿态
-            "total_steps": 1.5e5,                # 在前 10万~20万步完成过渡
+            "end_weight": -50.0,                # 后期：重罚，强迫它收敛到水平姿态
+            "total_steps": 1.8e5,                # 在前 10万~20万步完成过渡
         },
     )
 
     # --- B. 惩罚项权重：由无到有 (weight: 0.0 -> -0.005) ---
     # 这解决了“因惧怕惩罚而不敢动”的问题
     # 针对 rewards.py [1] 中的惩罚项
+    '''
     anneal_slip_penalty = CurrTerm(
         func=anneal_reward_term_weight,
         params={
             "term_name": "slip_consistency", # 对应 rewards.py 中的变量名
             "start_weight": 0.0,             # 初始：不惩罚打滑
-            "end_weight": -20,            # 最终：施加惩罚 (您原本的设定)
+            "end_weight": -1,            # 最终：施加惩罚 (您原本的设定)
             "total_steps": 1.5e5,            # 较快引入惩罚(1亿步)，尽早规范动作
+        },
+    )
+    '''
+    residual_mean_pen = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "residual_mean_pen",     # 残差
+            "start_weight": 0.0,
+            "end_weight": -3,
+            "total_steps": 1.8e5,
+        },
+    )
+    
+    true_wheel_slip = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "true_wheel_slip",     # 真实轮滑惩罚
+            "start_weight": 0.0,
+            "end_weight": -1,
+            "total_steps": 1.8e5,
+        },
+    )
+    
+    true_wheel_slip2 = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "true_wheel_slip2",     # 真实轮滑惩罚
+            "start_weight": 0.0,
+            "end_weight": -1,
+            "total_steps": 1.8e5,
         },
     )
     
@@ -265,7 +296,7 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "action_rate_l2",    # 抑制动作变化率
             "start_weight": 0.0,
-            "end_weight": -5,
+            "end_weight": -1,
             "total_steps": 1.8e5,
         },
     )
