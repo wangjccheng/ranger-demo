@@ -11,8 +11,8 @@ class SkidSteerLegEventsCfg:
         params={
             # 匹配全部“车轮刚体”，示例正则请按你的模型改：如 ".*wheel.*link" 或 "w_.*"
             "asset_cfg": SceneEntityCfg("robot", body_names=["w_.*"]),
-            "static_friction_range": (0.45, 0.85),
-            "dynamic_friction_range": (0.35, 0.75),
+            "static_friction_range": (0.45, 0.55),
+            "dynamic_friction_range": (0.35, 0.45),
             "restitution_range": (0.0, 0.05),
             "num_buckets": 16,
             "make_consistent": True,  # 动摩擦<=静摩擦 [2]

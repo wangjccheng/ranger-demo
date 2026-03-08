@@ -147,57 +147,55 @@ def flat_orientation_with_tolerance(
     # 注意：IsaacLab 的 RewTerm 会自动处理 batch 维度，通常返回 [N]
     return excess_tilt ** 2
 
-def true_wheel_slip_l2_with_deadzone(
+def true_wheel_slip_l2_with_smart_deadzone(
     env,
     wheel_body_names: list = ["w_lf", "w_rf", "w_lb", "w_rb"],
     wheel_radius: float = 0.19,
-    slip_tolerance: float = 0.1,  # 允许的合法滑移死区 (m/s)
+    base_tolerance: float = 0.05,  # 直线行驶时的极严死区 (抓不转的轮子)
+    turn_allowance: float = 0.2,   # 转向时的放宽系数
 ) -> torch.Tensor:
-    """
-    终极物理打滑惩罚 (致敬你的物理直觉！)：
-    通过提取机身坐标系下 X-Z 平面的合成速度，完美还原轮子沿地形切线的真实滚动速度。
-    """
     asset = env.scene["robot"]
-    
     body_ids, _ = asset.find_bodies(wheel_body_names)
     joint_ids, _ = asset.find_joints(wheel_body_names)
     
-    # 1. 理想前向线速度 (如果之前确认方向同向，直接相乘)
+    # 1. 理想前向线速度
     omega = asset.data.joint_vel[:, joint_ids]
     ideal_forward_vel = omega * wheel_radius
     
-    # 2. 获取轮芯在世界系下的真实线速度 [N, 4, 3]
+    # 2. 你的原版速度投影逻辑 (提取 X 和 Z)
     vel_w = asset.data.body_lin_vel_w[:, body_ids, :]
-    
-   # 3. 将世界速度转换到【机身坐标系(Base Frame)】
     base_quat = asset.data.root_quat_w.unsqueeze(1).expand(-1, len(body_ids), -1)
-    
-    # 使用官方推荐的高效新函数 quat_apply_inverse 替换 quat_rotate_inverse
     vel_b = math_utils.quat_apply_inverse(
         base_quat.reshape(-1, 4), 
         vel_w.reshape(-1, 3)
     ).reshape(-1, len(body_ids), 3)
     
-    # ★ 4. 核心修正：计算 X-Z 平面的合成速度 (即沿地形切线的真实滚动速度)
-    # 提取 X 分量和 Z 分量
-    vel_b_x = vel_b[:, :, 0]
-    vel_b_z = vel_b[:, :, 2]
+    real_forward_vel = torch.sign(vel_b[:, :, 0]) * torch.sqrt(vel_b[:, :, 0]**2 + vel_b[:, :, 2]**2)
     
-    # 勾股定理求合成速度的大小，并用 sign(vel_b_x) 赋予其正确的前进/后退方向
-    real_forward_vel = torch.sign(vel_b_x) * torch.sqrt(vel_b_x**2 + vel_b_z**2)
-    
-    # 5. 计算速度差的绝对值
+    # 3. 基础打滑误差
     slip_error = torch.abs(real_forward_vel - ideal_forward_vel)
     
-    # 6. 引入死区：只惩罚超出 tolerance 的打滑部分 (包容正常转弯时的横向拖拽导致的速度损耗)
-    excess_slip = torch.clamp(slip_error - slip_tolerance, min=0.0)
+    # ==========================================
+    # ★ 核心修复：动态死区 (取代你的固定 slip_tolerance)
+    # ==========================================
+    # 获取机身的偏航角速度 Yaw Rate
+    base_ang_vel_w = asset.data.root_ang_vel_w
+    base_ang_vel_b = math_utils.quat_apply_inverse(asset.data.root_quat_w, base_ang_vel_w)
+    yaw_rate = torch.abs(base_ang_vel_b[:, 2]) # [N]
     
-    # 7. 平方惩罚
+    # 计算智能死区：直线时是 base_tolerance，转弯越急，死区越大
+    smart_tolerance = base_tolerance + turn_allowance * yaw_rate
+    smart_tolerance = smart_tolerance.unsqueeze(1) # [N, 1] 对齐4个轮子
+    
+    # 4. 用动态死区过滤误差 (转弯时这里的 excess_slip 会被完美吃掉，变成 0)
+    excess_slip = torch.clamp(slip_error - smart_tolerance, min=0.0)
+    
+    # 5. 平方惩罚
     slip_penalty = torch.sum(excess_slip**2, dim=1)
     
     return slip_penalty
     
-
+'''
 def lateral_slip_l2_with_kinematic_deadzone(
     env,
     wheel_body_names: list = ["w_lf", "w_rf", "w_lb", "w_rb"],
@@ -238,7 +236,7 @@ def lateral_slip_l2_with_kinematic_deadzone(
     lateral_slip_penalty = torch.sum(excess_lateral_slip**2, dim=1)
     
     return lateral_slip_penalty
-
+'''
 
 @configclass
 class SkidSteerLegRewardsCfg:
@@ -291,21 +289,12 @@ class SkidSteerLegRewardsCfg:
     
     # ★ 新增：真实物理打滑/空转惩罚
     true_wheel_slip = RewTerm(
-        func=true_wheel_slip_l2_with_deadzone,
+        func=true_wheel_slip_l2_with_smart_deadzone,
         params={
             "wheel_body_names": ["w_lf", "w_rf", "w_lb", "w_rb"],
             "wheel_radius": 0.19, 
-            "slip_tolerance": 0.2
-        },
-        weight=-1.0,  # 这里的权重不需要像之前 -20 那么极端，-2 到 -5 之间就足够让它学会踩地了
-    )
-    
-    true_wheel_slip2 = RewTerm(
-        func=lateral_slip_l2_with_kinematic_deadzone,
-        params={
-            "wheel_body_names": ["w_lf", "w_rf", "w_lb", "w_rb"],
-            "base_tolerance": 0.02, 
-            "kinematic_coef": 0.5
+            "base_tolerance": 0.05,
+            "turn_allowance": 0.2
         },
         weight=-1.0,  # 这里的权重不需要像之前 -20 那么极端，-2 到 -5 之间就足够让它学会踩地了
     )
@@ -317,7 +306,7 @@ class SkidSteerLegRewardsCfg:
     )
 
     # 5) 能耗与控制平滑 [4]
-    dof_torques_l2 = RewTerm(func=mdp.rewards.joint_torques_l2, weight=-2.5e-6)
+    #dof_torques_l2 = RewTerm(func=mdp.rewards.joint_torques_l2, weight=-2.5e-6)
     dof_acc_l2     = RewTerm(func=mdp.rewards.joint_acc_l2,     weight=-5.0e-4)
     action_rate_l2 = RewTerm(func=mdp.rewards.action_rate_l2,   weight=-0.05)
 

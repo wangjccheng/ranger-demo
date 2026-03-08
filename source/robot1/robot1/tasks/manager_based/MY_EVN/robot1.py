@@ -71,7 +71,7 @@ ROBOT1_CFG = ArticulationCfg(
             "w_rb",
             ],
             #saturation_effort=1000.0,
-            effort_limit=100,
+            effort_limit=200,
             velocity_limit=50,
             stiffness={
             "w_lb": 0.0001,
