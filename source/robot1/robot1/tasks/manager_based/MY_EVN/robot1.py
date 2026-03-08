@@ -5,7 +5,7 @@ from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
 ROBOT1_CFG = ArticulationCfg(
     spawn=sim_utils.UsdFileCfg(
-        usd_path=f"/home/wjc/robot1/urdf/usd/urdf/urdf copy.usd",          # 替换为你前面导出的机器人usd文件路径
+        usd_path=f"/home/wjc/robot1/urdf/usd/urdf/urdf.usd",          # 替换为你前面导出的机器人usd文件路径
         activate_contact_sensors=True,          #地面接触检测
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=False,
@@ -18,7 +18,7 @@ ROBOT1_CFG = ArticulationCfg(
             max_depenetration_velocity=10000.0,
         ),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-            enabled_self_collisions=True, solver_position_iteration_count=4, solver_velocity_iteration_count=4
+            enabled_self_collisions=True, solver_position_iteration_count=6, solver_velocity_iteration_count=6
         ),
     ),
     init_state=ArticulationCfg.InitialStateCfg(

@@ -107,7 +107,7 @@ class SkidSteerLegAction(ActionTerm):
         )
 
     def process_actions(self, actions: torch.Tensor):
-        actions = actions.detach()
+        actions = torch.clamp(actions.detach(), -1.0, 1.0)
         self._raw_actions[:] = actions
         
         # ==========================================================

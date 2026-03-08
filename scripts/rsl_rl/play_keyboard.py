@@ -49,28 +49,42 @@ class KeyboardController:
         app_window = omni.appwindow.get_default_app_window()
         self.keyboard = app_window.get_keyboard()
         self.sub = self.input.subscribe_to_keyboard_events(self.keyboard, self._on_key_event)
-        self.cmd_vel = np.array([0.0, 0.0, 0.0]) 
+        #self.cmd_vel = np.array([0.0, 0.0, 0.0]) 
+        # 【修改】区分当前实际下发的指令和键盘按下的目标指令
+        self.current_vel = np.array([0.0, 0.0, 0.0]) 
+        self.target_vel = np.array([0.0, 0.0, 0.0])
         self.speed_scale = speed_scale
         self.rot_scale = rot_scale
         self.stop_requested = False # 添加退出标志
+        self.reset_requested = False
 
     def _on_key_event(self, event, *args):
         if event.type == carb.input.KeyboardEventType.KEY_PRESS or event.type == carb.input.KeyboardEventType.KEY_REPEAT:
-            if event.input == carb.input.KeyboardInput.W: self.cmd_vel[0] = self.speed_scale
-            elif event.input == carb.input.KeyboardInput.S: self.cmd_vel[0] = -self.speed_scale
-            elif event.input == carb.input.KeyboardInput.A: self.cmd_vel[2] = self.rot_scale
-            elif event.input == carb.input.KeyboardInput.D: self.cmd_vel[2] = -self.rot_scale
-            elif event.input == carb.input.KeyboardInput.Q: self.cmd_vel[1] = self.speed_scale
-            elif event.input == carb.input.KeyboardInput.E: self.cmd_vel[1] = -self.speed_scale
-            elif event.input == carb.input.KeyboardInput.ESCAPE: self.stop_requested = True # ESC 退出
+            if event.input == carb.input.KeyboardInput.W: self.target_vel[0] = self.speed_scale
+            elif event.input == carb.input.KeyboardInput.S: self.target_vel[0] = -self.speed_scale
+            elif event.input == carb.input.KeyboardInput.A: self.target_vel[2] = self.rot_scale
+            elif event.input == carb.input.KeyboardInput.D: self.target_vel[2] = -self.rot_scale
+            elif event.input == carb.input.KeyboardInput.Q: self.target_vel[1] = self.speed_scale
+            elif event.input == carb.input.KeyboardInput.E: self.target_vel[1] = -self.speed_scale
+            elif event.input == carb.input.KeyboardInput.ESCAPE: self.stop_requested = True
+            elif event.input == carb.input.KeyboardInput.R: self.reset_requested = True
         elif event.type == carb.input.KeyboardEventType.KEY_RELEASE:
-            if event.input in [carb.input.KeyboardInput.W, carb.input.KeyboardInput.S]: self.cmd_vel[0] = 0.0
-            elif event.input in [carb.input.KeyboardInput.Q, carb.input.KeyboardInput.E]: self.cmd_vel[1] = 0.0
-            elif event.input in [carb.input.KeyboardInput.A, carb.input.KeyboardInput.D]: self.cmd_vel[2] = 0.0
+            if event.input in [carb.input.KeyboardInput.W, carb.input.KeyboardInput.S]: self.target_vel[0] = 0.0
+            elif event.input in [carb.input.KeyboardInput.Q, carb.input.KeyboardInput.E]: self.target_vel[1] = 0.0
+            elif event.input in [carb.input.KeyboardInput.A, carb.input.KeyboardInput.D]: self.target_vel[2] = 0.0
 
 def main():
     # 配置与环境初始化
     env_cfg = parse_env_cfg(args_cli.task, device="cuda:0", num_envs=args_cli.num_envs)
+    # 【新增 1】：关闭域随机化干扰
+    # 替换为以下代码：
+    if hasattr(env_cfg, "events") and env_cfg.events is not None:
+        for attr in dir(env_cfg.events):
+            if not attr.startswith("__"):  # 忽略内置属性
+                setattr(env_cfg.events, attr, None)
+    # 【新增 2】：强制关闭航向角控制，确保我们通过键盘塞入的是纯粹的线速度/角速度
+    if hasattr(env_cfg, "commands") and hasattr(env_cfg.commands, "base_velocity"):
+        env_cfg.commands.base_velocity.heading_command = False
     env = gym.make(args_cli.task, cfg=env_cfg)
     env = RslRlVecEnvWrapper(env)
 
@@ -91,6 +105,10 @@ def main():
     ppo_runner = OnPolicyRunner(env, agent_cfg_dict, log_dir=None, device=env_cfg.sim.device)
     ppo_runner.load(checkpoint_path)
     policy = ppo_runner.get_inference_policy(device=env.unwrapped.device)
+    try:
+        policy_nn = ppo_runner.alg.policy
+    except AttributeError:
+        policy_nn = ppo_runner.alg.actor_critic
 
     keyboard = KeyboardController(speed_scale=1.0, rot_scale=1.0)
     
@@ -116,33 +134,47 @@ def main():
         if keyboard.stop_requested:
             break
             
+        if keyboard.reset_requested:
+            print("\n[INFO] 收到手动重置指令！正在重置机器人...")
+            obs, _ = env.reset()
+            if hasattr(policy_nn, "reset"):
+                force_dones = torch.ones(env.unwrapped.num_envs, dtype=torch.bool, device=env.unwrapped.device)
+                policy_nn.reset(force_dones)
+            keyboard.reset_requested = False
+            continue
+
         with torch.inference_mode():
-            # 1. 覆盖指令
-            user_vel = torch.tensor(keyboard.cmd_vel, dtype=torch.float32, device=env.unwrapped.device).repeat(env.unwrapped.num_envs, 1)
+            # 【新增】平滑过渡逻辑 (Exponential Moving Average)
+            # smooth_factor 控制加速度大小。值越小（如 0.02），加速越柔和；值越大（如 0.5），加速越猛。
+            # 你可以根据实际操控手感修改这个系数
+            smooth_factor = 0.05 
+            keyboard.current_vel += (keyboard.target_vel - keyboard.current_vel) * smooth_factor
+            
+            # 1. 覆盖指令 (注意这里使用的是平滑后的 current_vel，而不是直接用按键目标值)
+            user_vel = torch.tensor(keyboard.current_vel, dtype=torch.float32, device=env.unwrapped.device).repeat(env.unwrapped.num_envs, 1)
+            
             try:
                 cmd_term = env.unwrapped.command_manager.get_term("base_velocity")
-                # 兼容 Isaac Lab 的不同版本命名
                 if hasattr(cmd_term, 'command'):
-                    cmd_term.command[:, 0] = user_vel[:, 0]  # vx
-                    cmd_term.command[:, 1] = user_vel[:, 1]  # vy
-                    
-                    # 只有当键盘有转向输入时，才覆盖系统的 wz 指令
-                    if keyboard.cmd_vel[2] != 0.0:
-                        cmd_term.command[:, 2] = user_vel[:, 2] 
-                        
+                    # 无条件覆盖指令
+                    cmd_term.command[:, 0] = user_vel[:, 0]  
+                    cmd_term.command[:, 1] = user_vel[:, 1]  
+                    cmd_term.command[:, 2] = user_vel[:, 2]  
                 elif hasattr(cmd_term, 'vel_command_b'):
                     cmd_term.vel_command_b[:, 0] = user_vel[:, 0]
                     cmd_term.vel_command_b[:, 1] = user_vel[:, 1]
-                    if keyboard.cmd_vel[2] != 0.0:
-                        cmd_term.vel_command_b[:, 2] = user_vel[:, 2]
-                else:
-                    print(f"警告: 找不到 command 属性。可用属性为: {dir(cmd_term)}")
-                    
+                    cmd_term.vel_command_b[:, 2] = user_vel[:, 2]
             except Exception as e:
-                print(f"覆盖指令时发生错误: {e}")
+                pass
+            
             # 2. 推理与步进
             actions = policy(obs)
-            obs, _, _, _ = env.step(actions)
+            # 【重要修复】：提取 dones 信号
+            obs, _, dones, _ = env.step(actions)
+            
+            # 【重要修复】：当环境重置时，同步重置 GRU 隐藏状态
+            if hasattr(policy_nn, "reset"):
+                policy_nn.reset(dones)
 
             # 3. 获取数据
             root_quat = robot_entity.data.root_quat_w
@@ -154,8 +186,10 @@ def main():
             logs["time"].append(sim_time)
             logs["roll"].append(r_deg)
             logs["pitch"].append(p_deg)
-            logs["cmd_vx"].append(keyboard.cmd_vel[0])
-            logs["cmd_wz"].append(keyboard.cmd_vel[2])
+            
+            # 【修复这里】：把 cmd_vel 改为 current_vel
+            logs["cmd_vx"].append(keyboard.current_vel[0])
+            logs["cmd_wz"].append(keyboard.current_vel[2])
             
             sim_time += dt
 
