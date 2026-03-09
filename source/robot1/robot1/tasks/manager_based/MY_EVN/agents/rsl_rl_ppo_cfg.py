@@ -10,7 +10,7 @@ from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, R
 @configclass
 class PPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 128
-    max_iterations = 3000
+    max_iterations = 2000
     save_interval = 500  # 建议改大一点，解决硬盘占用问题
     experiment_name = "youxia_manager"
     empirical_normalization = True
@@ -22,8 +22,8 @@ class PPORunnerCfg(RslRlOnPolicyRunnerCfg):
         
         init_noise_std=0.3,
         # MLP 部分：处理特征提取 (处理 CNN 潜变量和本体感知的拼接)
-        actor_hidden_dims=[1024, 256, 64],
-        critic_hidden_dims=[1024, 256, 64],
+        actor_hidden_dims=[512, 256, 128],
+        critic_hidden_dims=[512, 256, 128],
         activation="elu",
         
         # ★ 2. RNN 部分：切换为 GRU

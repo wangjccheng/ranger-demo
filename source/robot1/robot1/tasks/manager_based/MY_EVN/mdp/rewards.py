@@ -55,6 +55,25 @@ def slip_consistency_l2(
     dw2 = (w_hat - w_b)**2
     return dv2 + dw2
 '''
+def residual_rate_l2(env, residual_indices: list = [2, 3, 4, 5]) -> torch.Tensor:
+    """
+    惩罚轮速残差的帧间变化率 (Residual Rate Penalty)
+    强制神经网络平滑地微调四个车轮的差速，彻底抑制画圆时的极限环震荡和高频抖动。
+    """
+    # 获取当前帧和上一帧的【原始动作】 (Raw actions, 范围通常在 [-1, 1])
+    current_action = env.action_manager.action
+    prev_action = env.action_manager.prev_action
+    
+    # 提取属于 4 个轮子残差的维度
+    current_residuals = current_action[:, residual_indices]
+    prev_residuals = prev_action[:, residual_indices]
+    
+    # 计算差值的平方和
+    residual_rate_penalty = torch.sum(torch.square(current_residuals - prev_residuals), dim=1)
+    
+    return residual_rate_penalty
+
+
 # 可选：姿态/重力投影的“水平”奖励已由内置 flat_orientation_l2/ang_vel_xy_l2 覆盖 [4]。
 def feet_air_time_l2(
     env,
@@ -256,6 +275,13 @@ class SkidSteerLegRewardsCfg:
         func=mdp.rewards.track_ang_vel_z_exp,
         params={"command_name": "base_velocity", "std": 0.5},
         weight=2.0,
+    )
+    # ★ 新增：残差平滑度惩罚 (专治左右画龙)
+    residual_rate_pen = RewTerm(
+        func=residual_rate_l2,
+        params={"residual_indices": [2, 3, 4, 5]},
+        # 建议起始权重：-0.01 到 -0.05 之间
+        weight=-0.08, 
     )
 
     # 2) 车身稳定/抑制弹跳 [4]

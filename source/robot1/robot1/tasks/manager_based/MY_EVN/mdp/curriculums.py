@@ -171,7 +171,7 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "track_lin_vel_xy_exp", 
             "param_name": "std",
-            "start_val": 1.0,           # 初始：允许 ±1m/s 的误差仍有较高奖励
+            "start_val": 0.8,           # 初始：允许 ±1m/s 的误差仍有较高奖励
             "end_val": 0.2,             # 最终：必须非常精准 (您原本的设定)
             "total_steps": 1.0e5,       # 在 2亿步(约一半训练程)内完成收紧
         },
@@ -183,7 +183,7 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "track_ang_vel_z_exp",
             "param_name": "std",
-            "start_val": 1.0,
+            "start_val": 0.8,
             "end_val": 0.2, 
             "total_steps": 1.0e5,
         },
@@ -194,7 +194,7 @@ class SkidSteerLegCurriculumCfg:
             "term_name": "flat_orientation_l2",  # 对应 rewards 配置中的名字
             "start_weight": 0.0,                # 初期：轻微惩罚，允许它歪歪扭扭地跑
             "end_weight": -50.0,                # 后期：重罚，强迫它收敛到水平姿态
-            "total_steps": 1.3e5,                # 在前 10万~20万步完成过渡
+            "total_steps": 1.2e5,                # 在前 10万~20万步完成过渡
         },
     )
 
@@ -212,13 +212,23 @@ class SkidSteerLegCurriculumCfg:
         },
     )
     '''
+    
+    residual_rate_pen = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "residual_rate_pen",     # 残差
+            "start_weight": 0.0,
+            "end_weight": -0.08,
+            "total_steps": 1.2e5,
+        },
+    )
     residual_mean_pen = CurrTerm(
         func=anneal_reward_term_weight,
         params={
             "term_name": "residual_mean_pen",     # 残差
             "start_weight": 0.0,
             "end_weight": -5,
-            "total_steps": 1.3e5,
+            "total_steps": 1.0e5,
         },
     )
     
@@ -228,7 +238,7 @@ class SkidSteerLegCurriculumCfg:
             "term_name": "true_wheel_slip",     # 真实轮滑惩罚
             "start_weight": 0.0,
             "end_weight": -5,
-            "total_steps": 1.3e5,
+            "total_steps": 1.2e5,
         },
     )
     
@@ -239,7 +249,7 @@ class SkidSteerLegCurriculumCfg:
             "term_name": "lin_vel_z_l2",     # 抑制弹跳
             "start_weight": 0.0,
             "end_weight": -20,
-            "total_steps": 1.3e5,
+            "total_steps": 1.2e5,
         },
     )
 
@@ -249,7 +259,7 @@ class SkidSteerLegCurriculumCfg:
             "term_name": "ang_vel_xy_l2",    # 抑制倾斜
             "start_weight": 0.0,
             "end_weight": -0.1,
-            "total_steps": 1.3e5,
+            "total_steps": 1.2e5,
         },
     )
     # 抑制调距关节速度
@@ -262,7 +272,7 @@ class SkidSteerLegCurriculumCfg:
             "term_name": "leg_center_l2",    # 抑制调距关节偏离默认位置
             "start_weight": 0.0,
             "end_weight": -0.05,
-            "total_steps": 1.3e5,
+            "total_steps": 1.4e5,
         },
     )
     '''  
@@ -293,7 +303,7 @@ class SkidSteerLegCurriculumCfg:
             "term_name": "dof_acc_l2",    # 抑制加速度
             "start_weight": 0.0,
             "end_weight": -2.0e-7,
-            "total_steps": 1.2e5,
+            "total_steps": 1.4e5,
         },
     )
     
