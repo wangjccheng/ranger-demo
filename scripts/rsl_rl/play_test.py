@@ -1,3 +1,276 @@
+
+"""
+Keyboard Control + Data Logging + Plotting
+Fixed: Simultaneous negative commands (S + D) issue
+"""
+import argparse
+import sys
+import os
+import torch
+import numpy as np
+import carb
+import gymnasium as gym
+import matplotlib.pyplot as plt
+from datetime import datetime
+
+from isaaclab.app import AppLauncher
+
+# 1. 启动 Isaac Sim
+parser = argparse.ArgumentParser(description="Keyboard Control & Plotting")
+parser.add_argument("--task", type=str, default="sk-Robot1-v0", help="Task name")
+parser.add_argument("--load_run", type=str, required=True, help="Run folder or timestamp")
+parser.add_argument("--checkpoint", type=str, default="model.pt", help="Checkpoint filename")
+parser.add_argument("--num_envs", type=int, default=1, help="Number of environments")
+parser.add_argument("--output_dir", type=str, default=None, help="Directory to save the generated plot")
+parser.add_argument("--random_cmd", action="store_true", help="Enable random command mode")
+parser.add_argument("--cmd_interval", type=float, default=5.0, help="Interval (seconds) to change random commands")
+
+AppLauncher.add_app_launcher_args(parser)
+args_cli = parser.parse_args()
+args_cli.headless = False
+
+app_launcher = AppLauncher(args_cli)
+simulation_app = app_launcher.app
+
+# 2. 导入依赖
+import isaaclab.utils.math as math_utils
+from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
+from rsl_rl.runners import OnPolicyRunner
+from isaaclab_tasks.utils import parse_env_cfg, load_cfg_from_registry
+import robot1.tasks  
+
+from robot1.tasks.manager_based.MY_EVN.agents.cnn import CNNActorCriticRecurrent
+import rsl_rl.runners.on_policy_runner as on_policy_runner
+on_policy_runner.CNNActorCriticRecurrent = CNNActorCriticRecurrent
+
+# --- 键盘控制器 (完全恢复为你提供的那版有效逻辑) ---
+class KeyboardController:
+    def __init__(self, speed_scale=1.0, rot_scale=1.0):
+        self.input = carb.input.acquire_input_interface()
+        import omni.appwindow
+        app_window = omni.appwindow.get_default_app_window()
+        self.keyboard = app_window.get_keyboard()
+        self.sub = self.input.subscribe_to_keyboard_events(self.keyboard, self._on_key_event)
+        
+        self.current_vel = np.array([0.0, 0.0, 0.0]) 
+        self.target_vel = np.array([0.0, 0.0, 0.0])
+        self.speed_scale = speed_scale
+        self.rot_scale = rot_scale
+        self.stop_requested = False 
+        self.reset_requested = False
+
+    def _on_key_event(self, event, *args):
+        if event.type == carb.input.KeyboardEventType.KEY_PRESS or event.type == carb.input.KeyboardEventType.KEY_REPEAT:
+            if event.input == carb.input.KeyboardInput.W: self.target_vel[0] = self.speed_scale
+            elif event.input == carb.input.KeyboardInput.S: self.target_vel[0] = -self.speed_scale
+            elif event.input == carb.input.KeyboardInput.A: self.target_vel[2] = self.rot_scale
+            elif event.input == carb.input.KeyboardInput.D: self.target_vel[2] = -self.rot_scale
+            elif event.input == carb.input.KeyboardInput.Q: self.target_vel[1] = self.speed_scale
+            elif event.input == carb.input.KeyboardInput.E: self.target_vel[1] = -self.speed_scale
+            elif event.input == carb.input.KeyboardInput.ESCAPE: self.stop_requested = True
+            elif event.input == carb.input.KeyboardInput.R: self.reset_requested = True
+        elif event.type == carb.input.KeyboardEventType.KEY_RELEASE:
+            if event.input in [carb.input.KeyboardInput.W, carb.input.KeyboardInput.S]: self.target_vel[0] = 0.0
+            elif event.input in [carb.input.KeyboardInput.Q, carb.input.KeyboardInput.E]: self.target_vel[1] = 0.0
+            elif event.input in [carb.input.KeyboardInput.A, carb.input.KeyboardInput.D]: self.target_vel[2] = 0.0
+
+def main():
+    env_cfg = parse_env_cfg(args_cli.task, device="cuda:0", num_envs=args_cli.num_envs)
+    
+    # 强制关闭域随机化与航向角控制
+    if hasattr(env_cfg, "events") and env_cfg.events is not None:
+        for attr in dir(env_cfg.events):
+            if not attr.startswith("__"):  
+                setattr(env_cfg.events, attr, None)
+                
+    if hasattr(env_cfg, "commands") and hasattr(env_cfg.commands, "base_velocity"):
+        env_cfg.commands.base_velocity.heading_command = False
+        env_cfg.commands.base_velocity.rel_standing_envs = 0.0  
+        env_cfg.commands.base_velocity.rel_heading_envs = 0.0   
+        env_cfg.commands.base_velocity.resampling_time_range = (99999.0, 99999.0) 
+        
+    env = gym.make(args_cli.task, cfg=env_cfg)
+    env = RslRlVecEnvWrapper(env)
+
+    # 路径处理
+    agent_cfg = load_cfg_from_registry(args_cli.task, "rsl_rl_cfg_entry_point")
+    if hasattr(agent_cfg, "to_dict"): agent_cfg_dict = agent_cfg.to_dict()
+    else: agent_cfg_dict = agent_cfg
+
+    if os.path.exists(args_cli.load_run):
+        resume_path = os.path.abspath(args_cli.load_run)
+    else:
+        log_root_path = os.path.join("logs", "rsl_rl", agent_cfg_dict["experiment_name"])
+        resume_path = os.path.join(os.path.abspath(log_root_path), args_cli.load_run)
+    
+    checkpoint_path = os.path.join(resume_path, args_cli.checkpoint)
+    print(f"Loading checkpoint: {checkpoint_path}")
+
+    ppo_runner = OnPolicyRunner(env, agent_cfg_dict, log_dir=None, device=env_cfg.sim.device)
+    ppo_runner.load(checkpoint_path)
+    policy = ppo_runner.get_inference_policy(device=env.unwrapped.device)
+    
+    try:
+        policy_nn = ppo_runner.alg.policy
+    except AttributeError:
+        policy_nn = ppo_runner.alg.actor_critic
+
+    keyboard = KeyboardController(speed_scale=1.0, rot_scale=1.0)
+    
+    logs = {
+        "time": [], "roll": [], "pitch": [], 
+        "cmd_vx": [], "cmd_wz": [],
+        "actual_vx": [], "actual_wz": [],  
+        "action_vx": [], "action_wz": [],
+        "action_lf": [], "action_rf": [], "action_lh": [], "action_rh": []
+    }
+    
+    # 防止启动卡死的预热机制
+    obs, _ = env.reset()
+    if hasattr(policy_nn, "reset"):
+        with torch.inference_mode():
+            force_dones = torch.ones(env.unwrapped.num_envs, dtype=torch.bool, device=env.unwrapped.device)
+            policy_nn.reset(force_dones)
+
+    robot_entity = env.unwrapped.scene["robot"]
+    dt = env.unwrapped.step_dt
+    sim_time = 0.0
+    
+    last_random_time = -args_cli.cmd_interval
+    current_random_cmd = np.array([0.0, 0.0, 0.0])
+
+    print("\n" + "="*50)
+    print("Recording Data... Press ESC to Finish, Press 'R' to Reset Environment")
+    print("="*50 + "\n")
+
+    while simulation_app.is_running():
+        if keyboard.stop_requested:
+            break
+            
+        if keyboard.reset_requested:
+            print("\n[INFO] 收到手动重置指令！正在重置机器人和隐藏状态...")
+            obs, _ = env.reset()
+            if hasattr(policy_nn, "reset"):
+                force_dones = torch.ones(env.unwrapped.num_envs, dtype=torch.bool, device=env.unwrapped.device)
+                with torch.inference_mode(): 
+                    policy_nn.reset(force_dones)
+            keyboard.reset_requested = False
+            keyboard.current_vel = np.array([0.0, 0.0, 0.0])
+            continue 
+
+        with torch.inference_mode():
+            # 【平滑过渡逻辑】
+            smooth_factor = 0.05 
+            keyboard.current_vel += (keyboard.target_vel - keyboard.current_vel) * smooth_factor
+            
+            user_vel = torch.tensor(keyboard.current_vel, dtype=torch.float32, device=env.unwrapped.device).repeat(env.unwrapped.num_envs, 1)
+            
+            try:
+                cmd_term = env.unwrapped.command_manager.get_term("base_velocity")
+                # ★ 核心修正点：将 elif 改为了独立的 if。必须强行同时改写两者！
+                if hasattr(cmd_term, 'command'):
+                    cmd_term.command[:, 0] = user_vel[:, 0]  
+                    cmd_term.command[:, 1] = user_vel[:, 1]  
+                    cmd_term.command[:, 2] = user_vel[:, 2]  
+                if hasattr(cmd_term, 'vel_command_b'):
+                    cmd_term.vel_command_b[:, 0] = user_vel[:, 0]
+                    cmd_term.vel_command_b[:, 1] = user_vel[:, 1]
+                    cmd_term.vel_command_b[:, 2] = user_vel[:, 2]
+            except Exception:
+                pass
+                
+            actions = policy(obs)
+            obs, _, dones, _ = env.step(actions)
+            
+            if hasattr(policy_nn, "reset"):
+                policy_nn.reset(dones)
+
+        # 收集物理状态
+        root_quat = robot_entity.data.root_quat_w
+        roll, pitch, yaw = math_utils.euler_xyz_from_quat(root_quat)
+        r_deg = torch.rad2deg(roll[0]).item()
+        p_deg = torch.rad2deg(pitch[0]).item()
+        
+        actual_vx = robot_entity.data.root_lin_vel_b[0, 0].item()
+        actual_wz = robot_entity.data.root_ang_vel_b[0, 2].item()
+        
+        logs["time"].append(sim_time)
+        logs["roll"].append(r_deg)
+        logs["pitch"].append(p_deg)
+        
+        logs["cmd_vx"].append(keyboard.current_vel[0]) 
+        logs["cmd_wz"].append(keyboard.current_vel[2])
+        logs["actual_vx"].append(actual_vx)
+        logs["actual_wz"].append(actual_wz)
+        
+        logs["action_vx"].append(actions[0, 0].item())
+        logs["action_wz"].append(actions[0, 1].item())
+        logs["action_lf"].append(actions[0, 2].item())
+        logs["action_rf"].append(actions[0, 3].item())
+        logs["action_lh"].append(actions[0, 4].item())
+        logs["action_rh"].append(actions[0, 5].item())
+        
+        sim_time += dt
+        print(f"\r[Rec] T:{sim_time:.1f}s | Cmd(Vx:{keyboard.current_vel[0]:5.2f} Wz:{keyboard.current_vel[2]:5.2f}) | Act(Vx:{actual_vx:5.2f} Wz:{actual_wz:5.2f}) | Pitch:{p_deg:5.1f}°", end="")
+
+    env.close()
+    
+    # ==========================================
+    # 5. 绘图与保存逻辑 (保留详尽的3子图数据展示)
+    # ==========================================
+    print("\n\nGenerating plots...")
+    
+    plt.style.use('ggplot')
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(10, 12), sharex=True)
+    
+    ax1.plot(logs["time"], logs["pitch"], label='Pitch (deg)', color='orange', linewidth=1.5)
+    ax1.plot(logs["time"], logs["roll"], label='Roll (deg)', color='green', linewidth=1.5)
+    ax1.set_ylabel('Angle (degrees)')
+    ax1.set_title('Robot Attitude Response')
+    ax1.legend()
+    ax1.grid(True)
+
+    ax2.plot(logs["time"], logs["cmd_vx"], label='Cmd Vx (m/s)', color='blue', linestyle='--', linewidth=2.0)
+    ax2.plot(logs["time"], logs["cmd_wz"], label='Cmd Wz (rad/s)', color='red', linestyle='--', linewidth=2.0)
+    ax2.plot(logs["time"], logs["actual_vx"], label='Actual Vx', color='dodgerblue', linewidth=1.5)
+    ax2.plot(logs["time"], logs["actual_wz"], label='Actual Wz', color='salmon', linewidth=1.5)
+    ax2.plot(logs["time"], logs["action_vx"], label='Action Vx', color='cyan', linewidth=1.0, alpha=0.6)
+    ax2.plot(logs["time"], logs["action_wz"], label='Action Wz', color='magenta', linewidth=1.0, alpha=0.6)
+    ax2.set_ylabel('Velocity / Action')
+    ax2.set_title('Velocity Tracking Performance (Command vs Actual)')
+    ax2.legend(loc='upper right', ncol=3, fontsize='small') 
+    ax2.grid(True)
+    
+    ax3.plot(logs["time"], logs["action_lf"], label='Leg LF', color='red', linewidth=1.0)
+    ax3.plot(logs["time"], logs["action_rf"], label='Leg RF', color='blue', linewidth=1.0)
+    ax3.plot(logs["time"], logs["action_lh"], label='Leg LH', color='green', linewidth=1.0)
+    ax3.plot(logs["time"], logs["action_rh"], label='Leg RH', color='purple', linewidth=1.0)
+    ax3.set_ylabel('Leg Position Action')
+    ax3.set_xlabel('Time (s)')
+    ax3.set_title('Active Suspension Outputs')
+    ax3.legend()
+    ax3.grid(True)
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    if args_cli.output_dir:
+        os.makedirs(args_cli.output_dir, exist_ok=True)
+        save_dir = args_cli.output_dir
+    else:
+        save_dir = resume_path
+        
+    save_path = os.path.join(save_dir, f"robot_states_{timestamp}.png")
+    
+    plt.tight_layout() 
+    plt.savefig(save_path)
+    print(f"[INFO] Plot saved to: {os.path.abspath(save_path)}")
+    
+    plt.show()
+    simulation_app.close()
+    
+if __name__ == "__main__":
+    main()
+
+'''
 """
 Keyboard Control + Data Logging + Plotting
 """
@@ -293,3 +566,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    '''

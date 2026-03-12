@@ -269,12 +269,12 @@ class SkidSteerLegRewardsCfg:
     track_lin_vel_xy_exp = RewTerm(
         func=mdp.rewards.track_lin_vel_xy_exp,
         params={"command_name": "base_velocity", "std": 0.5},  # std 越小，偏差罚得越快
-        weight=2.0,
+        weight=5.0,
     )
     track_ang_vel_z_exp = RewTerm(
         func=mdp.rewards.track_ang_vel_z_exp,
         params={"command_name": "base_velocity", "std": 0.5},
-        weight=2.0,
+        weight=5.0,
     )
     # ★ 新增：残差平滑度惩罚 (专治左右画龙)
     residual_rate_pen = RewTerm(
