@@ -140,10 +140,10 @@ class CommandsCfg:
 
     base_velocity = mdp.UniformVelocityCommandCfg(
         asset_name="robot",
-        resampling_time_range=(6.0, 6.0),
+        resampling_time_range=(1.0, 10.0),
         rel_standing_envs=0.1,
         rel_heading_envs=0.4,
-        heading_command=True,
+        heading_command=False,
         heading_control_stiffness=1.0,
         debug_vis=True,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
@@ -203,14 +203,14 @@ class ROBOT1RoughEnvCfg(ManagerBasedRLEnvCfg):
     def __post_init__(self):
         """Post initialization."""
         # general settings
-        self.decimation = 10
+        self.decimation = 5
         self.episode_length_s = 40.0
         # simulation settings
         
         self.viewer.eye = (-50.0, 0.0, 6.0)       # 相机放高、放远一点
         self.viewer.look_at = (-1.0, 0.0, -2.5)   # 看向机器人附近
         
-        self.sim.dt = 0.002
+        self.sim.dt = 0.001
         self.sim.render_interval = self.decimation
         self.sim.physics_material = self.scene.terrain.physics_material
         self.sim.physx.gpu_max_rigid_patch_count = 5 * 2**15

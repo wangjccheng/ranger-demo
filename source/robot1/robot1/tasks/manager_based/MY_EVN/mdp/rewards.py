@@ -213,6 +213,28 @@ def true_wheel_slip_l2_with_smart_deadzone(
     slip_penalty = torch.sum(excess_slip**2, dim=1)
     
     return slip_penalty
+# ---------------------------
+# 自定义奖励项（与动作对齐）
+# ---------------------------
+# ... 你之前的代码 ...
+
+def action_rate_l1(env) -> torch.Tensor:
+    """
+    动作帧间变化率的 L1 惩罚 (绝对值)。
+    专治 L2 惩罚管不到的微小高频“帕金森”抖动！
+    """
+    current_action = env.action_manager.action
+    prev_action = env.action_manager.prev_action
+    
+    # 使用绝对值而不是平方
+    return torch.sum(torch.abs(current_action - prev_action), dim=1)
+
+def residual_rate_l1(env, residual_indices: list = [2, 3, 4, 5]) -> torch.Tensor:
+    """残差专用的 L1 绝对值变化率惩罚"""
+    current_residuals = env.action_manager.action[:, residual_indices]
+    prev_residuals = env.action_manager.prev_action[:, residual_indices]
+    
+    return torch.sum(torch.abs(current_residuals - prev_residuals), dim=1)
     
 '''
 def lateral_slip_l2_with_kinematic_deadzone(
@@ -268,22 +290,25 @@ class SkidSteerLegRewardsCfg:
     # 1） 速度跟踪（指数核）[4]
     track_lin_vel_xy_exp = RewTerm(
         func=mdp.rewards.track_lin_vel_xy_exp,
-        params={"command_name": "base_velocity", "std": 0.5},  # std 越小，偏差罚得越快
-        weight=5.0,
+        params={"command_name": "base_velocity", "std": 0.6},  # std 越小，偏差罚得越快
+        weight=4.0,
     )
     track_ang_vel_z_exp = RewTerm(
         func=mdp.rewards.track_ang_vel_z_exp,
-        params={"command_name": "base_velocity", "std": 0.5},
-        weight=5.0,
+        params={"command_name": "base_velocity", "std": 0.6},
+        weight=4.0,
     )
     # ★ 新增：残差平滑度惩罚 (专治左右画龙)
-    residual_rate_pen = RewTerm(
-        func=residual_rate_l2,
-        params={"residual_indices": [2, 3, 4, 5]},
-        # 建议起始权重：-0.01 到 -0.05 之间
-        weight=-0.08, 
-    )
+    # 专门绞杀微小高频抖动 (一阶导 L1，新加入！)
+    action_rate_l1_pen = RewTerm(func=action_rate_l1, weight=-0.1)
 
+    # 残差项的双重惩罚 (抑制左右轮速微调画龙)
+    residual_rate_l2_pen = RewTerm(
+        func=residual_rate_l2, params={"residual_indices": [2, 3, 4, 5]}, weight=-0.1
+    )
+    residual_rate_l1_pen = RewTerm(
+        func=residual_rate_l1, params={"residual_indices": [2, 3, 4, 5]}, weight=-0.05
+    )
     # 2) 车身稳定/抑制弹跳 [4]
     flat_orientation_l2 = RewTerm(func=flat_orientation_with_tolerance, weight=-1000.0)
     ang_vel_xy_l2       = RewTerm(func=mdp.rewards.ang_vel_xy_l2,       weight=-0.1)
@@ -319,8 +344,8 @@ class SkidSteerLegRewardsCfg:
         params={
             "wheel_body_names": ["w_lf", "w_rf", "w_lb", "w_rb"],
             "wheel_radius": 0.19, 
-            "base_tolerance": 0.05,
-            "turn_allowance": 0.2
+            "base_tolerance": 0.08,
+            "turn_allowance": 0.3
         },
         weight=-1.0,  # 这里的权重不需要像之前 -20 那么极端，-2 到 -5 之间就足够让它学会踩地了
     )
@@ -332,7 +357,7 @@ class SkidSteerLegRewardsCfg:
     )
 
     # 5) 能耗与控制平滑 [4]
-    #dof_torques_l2 = RewTerm(func=mdp.rewards.joint_torques_l2, weight=-2.5e-6)
+    dof_torques_l2 = RewTerm(func=mdp.rewards.joint_torques_l2, weight=-2.5e-6)
     dof_acc_l2     = RewTerm(func=mdp.rewards.joint_acc_l2,     weight=-5.0e-4)
     action_rate_l2 = RewTerm(func=mdp.rewards.action_rate_l2,   weight=-0.05)
 
