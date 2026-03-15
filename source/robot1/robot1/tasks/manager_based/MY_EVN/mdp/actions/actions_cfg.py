@@ -52,5 +52,5 @@ class ActionsCfg:
         no_reverse=False,
         leg_rescale_to_limits=False,  # 建议用软限反归一化
         # +++ 【新增】 +++
-        action_alpha=1.0, # 建议从 0.3 或 0.4 开始训练
+        action_alpha=0.3, # 建议从 0.3 或 0.4 开始训练
     )

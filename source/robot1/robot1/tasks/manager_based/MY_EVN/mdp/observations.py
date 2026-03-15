@@ -9,7 +9,7 @@ from isaaclab.utils.noise import AdditiveGaussianNoiseCfg as Gnoise, AdditiveUni
 # 自定义观测辅助函数 (Helper Functions)
 # ==============================================================================
 
-def masked_height_scan(env, sensor_cfg: SceneEntityCfg, mask_region: str = "sides"):
+def masked_height_scan(env, sensor_cfg: SceneEntityCfg, mask_region: str = "random_dropout") -> torch.Tensor:
     """
     带遮罩的高度扫描：模拟传感器盲区或遮挡。
     """

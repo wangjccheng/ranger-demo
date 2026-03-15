@@ -24,6 +24,42 @@ from isaaclab.managers import CurriculumTermCfg as CurrTerm
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
+def anneal_action_filter_alpha(
+    env: ManagerBasedRLEnv,
+    env_ids: Sequence[int],
+    term_name: str,
+    start_alpha: float,
+    end_alpha: float,
+    total_steps: int,
+) -> None:
+    """
+    随着训练步数，将动作滤波器的系数 alpha 从 start_alpha 线性过渡到 end_alpha。
+    """
+    current_step = env.common_step_counter
+    # 每 50 步更新一次，减少算力开销
+    if current_step % 50 != 0 and current_step < total_steps:
+        return None
+
+    # 计算当前步数对应的 alpha
+    if current_step >= total_steps:
+        new_alpha = end_alpha
+    else:
+        progress = current_step / float(total_steps)
+        new_alpha = start_alpha + (end_alpha - start_alpha) * progress
+
+    try:
+        # 1. 访问 ActionManager 中的指定术语 (例如 "body_actions")
+        action_term = env.action_manager.get_term(term_name)
+        
+        # 2. 修改滤波器中的 alpha 值
+        # 注意：这假设你使用的是 LowPassActionFilter 或类似的 ExponentialMovingAverage 结构
+        if hasattr(action_term, "filter") and hasattr(action_term.filter, "alpha"):
+            action_term.filter.alpha = new_alpha
+    except Exception as e:
+        print(f"[Warning] 无法更新动作项 {term_name} 的滤波系数: {e}")
+
+    return None
+
 
 def terrain_levels_vel(
     env: ManagerBasedRLEnv, env_ids: Sequence[int], asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
@@ -182,8 +218,8 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "action_rate_l1_pen",
             "start_weight": 0.0,
-            "end_weight": -0.1,
-            "total_steps": 1.5e5,
+            "end_weight": -1.0,
+            "total_steps": 1.8e5,
         },
     )
     residual_rate_l2_pen = CurrTerm(
@@ -191,8 +227,8 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "residual_rate_l2_pen",
             "start_weight": 0.0,
-            "end_weight": -0.1,
-            "total_steps": 1.5e5,
+            "end_weight": -1.0,
+            "total_steps": 1.8e5,
         },
     )
     residual_rate_l1_pen = CurrTerm(
@@ -200,8 +236,8 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "residual_rate_l1_pen",
             "start_weight": 0.0,
-            "end_weight": -0.05,
-            "total_steps": 1.5e5,
+            "end_weight": -1.0,
+            "total_steps": 1.8e5,
         },
     )
 
@@ -221,7 +257,7 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "flat_orientation_l2",  # 对应 rewards 配置中的名字
             "start_weight": 0.0,                # 初期：轻微惩罚，允许它歪歪扭扭地跑
-            "end_weight": -50.0,                # 后期：重罚，强迫它收敛到水平姿态
+            "end_weight": -10.0,                # 后期：重罚，强迫它收敛到水平姿态
             "total_steps": 1.2e5,                # 在前 10万~20万步完成过渡
         },
     )
@@ -291,6 +327,17 @@ class SkidSteerLegCurriculumCfg:
             "total_steps": 1.2e5,
         },
     )
+    # 新增：滤波系数退火
+    # 逻辑：前期 α=0.05 (极度平滑) 帮助收敛；后期 α=0.2 (提高响应)
+    anneal_filter_alpha = CurrTerm(
+        func=anneal_action_filter_alpha,
+        params={
+            "term_name": "action_alpha",  # 需对应你 ActionManager 中的配置名
+            "start_alpha": 0.3,          # 初始：极强平滑，绞杀震荡
+            "end_alpha": 0.6,             # 最终：保留性能，减小延迟
+            "total_steps": 1.5e5,         # 建议与主要奖励退火节奏一致
+        },
+    )
     # 抑制调距关节速度
     led_speed_penalty = CurrTerm(func=anneal_reward_term_weight,params={"term_name": "leg_speed_l2", "start_weight": 0.0,"end_weight": -0.2,"total_steps": 1.3e5,},)
     
@@ -310,7 +357,7 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "dof_torques_l2",    # 抑制扭矩
             "start_weight": 0.0,
-            "end_weight": -2e-6,
+            "end_weight": -1.0e-6,
             "total_steps": 2.2e5,
         },
     )
@@ -331,8 +378,8 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "dof_acc_l2",    # 抑制加速度
             "start_weight": 0.0,
-            "end_weight": -1.0e-7,
-            "total_steps": 1.8e5,
+            "end_weight": -5.0e-7,
+            "total_steps": 1.6e5,
         },
     )
     

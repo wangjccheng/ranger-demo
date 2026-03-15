@@ -42,7 +42,7 @@ class SkidSteerLegAction(ActionTerm):
         self.eha_lag_alpha      = getattr(cfg, "eha_lag_alpha", 0.6)
 
         # ★ 新增：残差缩放系数 (Residual Scale)，最大允许神经网络微调 ±5 rad/s
-        self._residual_scale = getattr(cfg, "residual_scale", 5.0)
+        self._residual_scale = getattr(cfg, "residual_scale", 1.0)
 
         # ★ 修改：动作维度 = 2 (主线速度v,角速度w) + 4 (四个轮子的残差) + N (腿部数量)
         self._action_dim = 2 + 4 + len(self._leg_ids)
@@ -106,11 +106,12 @@ class SkidSteerLegAction(ActionTerm):
         # [新增逻辑] 清空通信延迟队列
         self._action_history[:, env_ids, :] = 0.0
         # 重新为这些环境随机分配延迟帧数，增强域随机化
-        self._current_delays[env_ids] = torch.randint(
-            self.min_delay, self.max_delay + 1, 
-            (len(env_ids),), 
-            device=self.device
-        )
+        self._current_delays[env_ids] = 0
+        #self._current_delays[env_ids] = torch.randint(
+        #    self.min_delay, self.max_delay + 1, 
+        #    (len(env_ids),), 
+        #    device=self.device
+        #)
 
     def process_actions(self, actions: torch.Tensor):
         actions = torch.clamp(actions.detach(), -1.0, 1.0)

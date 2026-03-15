@@ -121,7 +121,10 @@ def main():
         "actual_vx": [], "actual_wz": [],  
         "action_vx": [], "action_wz": [],
         "action_lf": [], "action_rf": [], "action_lh": [], "action_rh": [],
-        "pos_lf": [], "pos_rf": [], "pos_lh": [], "pos_rh": [] 
+        "pos_lf": [], "pos_rf": [], "pos_lh": [], "pos_rh": [] ,
+        # 轮子的 Action (网络输出) 和 实际速度 (rad/s)
+        "action_w_lf": [], "action_w_rf": [], "action_w_lh": [], "action_w_rh": [],
+        "vel_w_lf": [], "vel_w_rf": [], "vel_w_lh": [], "vel_w_rh": []
     }
     
     obs, _ = env.reset()
@@ -136,32 +139,48 @@ def main():
     
     # ================= 修复版：强制精准查找真实的关节索引 =================
    # ================= 修复版：强制精准查找真实的关节索引 =================
-    # 【修正点】：删除了末尾的 [0]，正确获取整个关节名称列表
     joint_names = robot_entity.data.joint_names 
-    
     print("\n" + "🔥"*25)
-    print(f"[DEBUG] Isaac Lab 底层实际关节顺序:\n{joint_names}")
+    print(f"[DEBUG] 底层实际关节顺序:\n{joint_names}")
     print("🔥"*25 + "\n")
     
-    # 请根据上面终端打印出的完整列表（里面应该有 8 个名字），
-    # 把真正的 4 条腿的名字填在下面：
-    target_leg_names = ['g_lb', 'g_lf', 'g_rb', 'g_rf'] # <--- 请核对这四个名字是否在打印的列表里
+    # 腿部名字
+    target_leg_names = ['g_lb', 'g_lf', 'g_rb', 'g_rf'] 
+    # 🌟 轮子名字 (请根据终端打印的列表确认这些名字，如果不一致请修改这里)
+    target_wheel_names = ['w_lb', 'w_lf', 'w_rb', 'w_rf'] 
     
     leg_indices = []
+    wheel_indices = []
     
-    for target_name in target_leg_names:
-        if target_name in joint_names:
-            leg_indices.append(joint_names.index(target_name))
-        else:
-            raise ValueError(
-                f"\n\n🚨 [致命错误] 找不到名为 '{target_name}' 的关节！\n"
-                f"当前存在的关节有: {joint_names}\n"
-            )
+    for name in target_leg_names:
+        if name in joint_names: leg_indices.append(joint_names.index(name))
+        else: raise ValueError(f"🚨 找不到腿关节: {name}")
             
-    print(f"✅ 成功匹配腿部精确关节索引: {leg_indices}")
-    # ==============================================================
-    # ==============================================================
+    for name in target_wheel_names:
+        if name in joint_names: wheel_indices.append(joint_names.index(name))
+        else: print(f"⚠️ [警告] 找不到轮子关节 '{name}'，请检查名称！图表将缺少轮子真实数据。")
 
+    print(f"✅ 成功匹配腿关节: {leg_indices} | 轮关节: {wheel_indices}")
+    # ==============================================================
+    # ==============================================================
+    # ================= 预热机制 (Warm-up) =================
+    # 先空跑 60 步（约 1.2 秒），强制输入 0 指令，不记录数据，度过落地猛烈颠簸期
+    print("\n[INFO] 正在执行防摔预热 (Warm-up phase)... 让机器人平稳落地")
+    for _ in range(60):
+        with torch.inference_mode():
+            # 强制速度指令为0
+            try:
+                cmd_term = env.unwrapped.command_manager.get_term("base_velocity")
+                if hasattr(cmd_term, 'command'): cmd_term.command[:] = 0.0
+                if hasattr(cmd_term, 'vel_command_b'): cmd_term.vel_command_b[:] = 0.0
+            except: pass
+            
+            actions = policy(obs)
+            obs, _, dones, _ = env.step(actions)
+            if hasattr(policy_nn, "reset"): policy_nn.reset(dones)
+    print("✅ 预热完成，开始正式接受指令并记录数据！\n")
+    
+    sim_time = 0.0 # 重置计时器，让图表从 0 秒开始算
     while simulation_app.is_running():
         if keyboard.stop_requested:
             break
@@ -213,6 +232,17 @@ def main():
         #actual_joint_pos = robot_entity.data.joint_pos[0, 4:8].cpu().numpy()
         # 【修正】：使用动态匹配到的准确索引，只抓取真正的悬挂腿！
         actual_joint_pos = robot_entity.data.joint_pos[0, leg_indices].cpu().numpy()
+        # 获取轮子的实际角速度 (rad/s)
+        if len(wheel_indices) == 4:
+            actual_wheel_vel = robot_entity.data.joint_vel[0, wheel_indices].cpu().numpy()
+        else:
+            actual_wheel_vel = [0.0, 0.0, 0.0, 0.0]
+            
+                # 第二步：计算理想的 2D 基础转速 (基础运动学)
+        wl = (actions[0, 0].item() - actions[0, 1].item()* 0.5 * (0.68 / 2.0)) / 0.19
+        wr = (actions[0, 0].item() + actions[0, 1].item() * 0.5 * (0.68 / 2.0)) / 0.19   
+        action_scale = 0.3
+        action_bias = 0.05
         # 记录数据
         logs["time"].append(sim_time)
         logs["roll"].append(r_deg)
@@ -221,24 +251,34 @@ def main():
         logs["cmd_wz"].append(keyboard.current_vel[2])
         logs["actual_vx"].append(actual_vx)
         logs["actual_wz"].append(actual_wz)
+        # 轮动作 (假设 2,3,4,5 是轮子)
+        logs["action_w_lh"].append(actions[0, 3].item()*1+wl)
+        logs["action_w_lf"].append(actions[0, 2].item()*1+wl)
+        logs["action_w_rh"].append(actions[0, 5].item()*1+wr)
+        logs["action_w_rf"].append(actions[0, 4].item()*1+wr)
         
         logs["action_vx"].append(actions[0, 0].item())
         logs["action_wz"].append(actions[0, 1].item())
-        logs["action_lf"].append(actions[0, 6].item())
-        logs["action_rf"].append(actions[0, 7].item())
-        logs["action_lh"].append(actions[0, 8].item())
-        logs["action_rh"].append(actions[0, 9].item())
-        
+        logs["action_lf"].append(actions[0, 6].item()*action_scale+action_bias)
+        logs["action_rf"].append(actions[0, 7].item()*action_scale+action_bias)
+        logs["action_lh"].append(actions[0, 8].item()*action_scale+action_bias)
+        logs["action_rh"].append(actions[0, 9].item()*action_scale+action_bias)
+
         logs["pos_lf"].append(actual_joint_pos[1])
         logs["pos_rf"].append(actual_joint_pos[3])
         logs["pos_lh"].append(actual_joint_pos[0])
         logs["pos_rh"].append(actual_joint_pos[2])
+        # 轮实际速度 (顺序与 target_wheel_names 一致: w_lb, w_lf, w_rb, w_rf)
+        logs["vel_w_lh"].append(actual_wheel_vel[0]) # lb
+        logs["vel_w_lf"].append(actual_wheel_vel[1]) # lf
+        logs["vel_w_rh"].append(actual_wheel_vel[2]) # rb
+        logs["vel_w_rf"].append(actual_wheel_vel[3]) # rf
         
         sim_time += dt
         print(f"\r[Rec] T:{sim_time:.1f}s | Cmd Vx:{keyboard.current_vel[0]:4.1f} | Act Vx:{actual_vx:4.1f} | Pitch:{p_deg:4.1f}° | Act Pos(rad):{actual_joint_pos[0]:.2f}", end="")
 
     env.close()
-    
+    '''
     # ==========================================
     # 5. 绘图逻辑 (共 6 个子图，双 Y 轴对比)
     # ==========================================
@@ -298,6 +338,70 @@ def main():
     plot_single_leg(ax_rh, logs["time"], logs["action_rh"], logs["pos_rh"], 'Right Hind (RH) Leg')
     
     ax_rh.set_xlabel('Time (s)')
+    '''
+    # ==========================================
+    # 5. 绘图逻辑 (5x2 并排双列布局)
+    # ==========================================
+    print("\n\nGenerating plots...")
+    
+    plt.style.use('ggplot')
+    # 创建 5 行 2 列的画布。第1行用合并的方式画整体姿态和速度，下面4行左腿右轮
+    fig = plt.figure(figsize=(16, 18))
+    gs = fig.add_gridspec(5, 2)
+    
+    ax_att = fig.add_subplot(gs[0, 0])
+    ax_vel = fig.add_subplot(gs[0, 1])
+    
+    axes_legs = [fig.add_subplot(gs[i, 0]) for i in range(1, 5)]
+    axes_wheels = [fig.add_subplot(gs[i, 1]) for i in range(1, 5)]
+    
+    # --- 子图1: 姿态角 ---
+    ax_att.plot(logs["time"], logs["pitch"], label='Pitch (deg)', color='orange', linewidth=1.5)
+    ax_att.plot(logs["time"], logs["roll"], label='Roll (deg)', color='green', linewidth=1.5)
+    ax_att.set_ylabel('Angle (deg)')
+    ax_att.set_title('Robot Attitude')
+    ax_att.legend(loc='upper right', ncol=2)
+    ax_att.grid(True)
+
+    # --- 子图2: 速度追踪 ---
+    ax_vel.plot(logs["time"], logs["cmd_vx"], label='Cmd Vx', color='blue', linestyle='--', linewidth=2.0)
+    ax_vel.plot(logs["time"], logs["cmd_wz"], label='Cmd Wz', color='red', linestyle='--', linewidth=2.0)
+    ax_vel.plot(logs["time"], logs["actual_vx"], label='Act Vx', color='dodgerblue', linewidth=1.5)
+    ax_vel.plot(logs["time"], logs["actual_wz"], label='Act Wz', color='salmon', linewidth=1.5)
+    ax_vel.set_ylabel('Velocity')
+    ax_vel.set_title('Base Velocity Tracking')
+    ax_vel.legend(loc='upper right', ncol=4, fontsize='small') 
+    ax_vel.grid(True)
+    
+    # 辅助画图函数：双Y轴
+    # === 专门为同单位数据准备的画图函数（单 Y 轴） ===
+    def plot_tracking(ax, time, target, actual, title, ylabel):
+        ax.set_title(title, fontsize=10, fontweight='bold')
+        
+        # 画目标值 (经过后处理的 Action)
+        ax.plot(time, target, label='Target Pos', color='tab:red', linewidth=1.5, linestyle='--')
+        
+        # 画实际值 (真实物理反馈)
+        ax.plot(time, actual, label='Actual Pos', color='tab:blue', linewidth=1.5, alpha=0.8)
+        
+        ax.set_ylabel(ylabel)
+        ax.legend(loc='upper right', fontsize='x-small')
+        ax.grid(True, alpha=0.3)
+
+    # --- 左列：腿部位置 (统一为 rad，直接同轴对比！) ---
+    plot_tracking(axes_legs[0], logs["time"], logs["action_lf"], logs["pos_lf"], 'Leg LF', 'Pos (rad)')
+    plot_tracking(axes_legs[1], logs["time"], logs["action_rf"], logs["pos_rf"], 'Leg RF', 'Pos (rad)')
+    plot_tracking(axes_legs[2], logs["time"], logs["action_lh"], logs["pos_lh"], 'Leg LH', 'Pos (rad)')
+    plot_tracking(axes_legs[3], logs["time"], logs["action_rh"], logs["pos_rh"], 'Leg RH', 'Pos (rad)')
+    axes_legs[3].set_xlabel('Time (s)')
+
+    # --- 右列：轮子速度 (Action vs 真实角速度rad/s) ---
+    plot_tracking(axes_wheels[0], logs["time"], logs["action_w_lf"], logs["vel_w_lf"], 'Wheel LF', 'Velocity (rad/s)')
+    plot_tracking(axes_wheels[1], logs["time"], logs["action_w_rf"], logs["vel_w_rf"], 'Wheel RF', 'Velocity (rad/s)')
+    plot_tracking(axes_wheels[2], logs["time"], logs["action_w_lh"], logs["vel_w_lh"], 'Wheel LH', 'Velocity (rad/s)')
+    plot_tracking(axes_wheels[3], logs["time"], logs["action_w_rh"], logs["vel_w_rh"], 'Wheel RH', 'Velocity (rad/s)')
+    axes_wheels[3].set_xlabel('Time (s)')
+    
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     if args_cli.output_dir:

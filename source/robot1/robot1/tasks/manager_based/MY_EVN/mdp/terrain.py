@@ -31,11 +31,11 @@ WAVE_TERRAINS_CFG = terrain_utils.TerrainGeneratorCfg(
             vertical_scale=0.01,
             amplitude_range=(0.00, 0.12),  # ★ 波浪振幅区间 [m]
             num_waves=4,                 # ★ 波数（越大，波越密）
-            proportion=0.60,              # 只生成这一种子地形
+            proportion=0.50,              # 只生成这一种子地形
         ),
         "slopes_up": HfPyramidSlopedTerrainCfg(
-            proportion=0.40,          # 占比 25%
-            slope_range=(0.0, 0.20),  # 坡度范围 (min, max)。0.35大约是20度坡
+            proportion=0.50,          # 占比 25%
+            slope_range=(0.0, 0.40),  # 坡度范围 (min, max)。0.35大约是20度坡
             platform_width=2.0,       # 坡顶平台的宽度 [m]，给机器人留出掉头或休息的空间
         ),
     },

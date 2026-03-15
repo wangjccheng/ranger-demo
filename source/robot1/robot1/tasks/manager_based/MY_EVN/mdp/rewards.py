@@ -170,8 +170,8 @@ def true_wheel_slip_l2_with_smart_deadzone(
     env,
     wheel_body_names: list = ["w_lf", "w_rf", "w_lb", "w_rb"],
     wheel_radius: float = 0.19,
-    base_tolerance: float = 0.05,  # 直线行驶时的极严死区 (抓不转的轮子)
-    turn_allowance: float = 0.2,   # 转向时的放宽系数
+    base_tolerance: float = 0.1,  # 直线行驶时的极严死区 (抓不转的轮子)
+    turn_allowance: float = 0.8,   # 转向时的放宽系数
 ) -> torch.Tensor:
     asset = env.scene["robot"]
     body_ids, _ = asset.find_bodies(wheel_body_names)
@@ -291,12 +291,12 @@ class SkidSteerLegRewardsCfg:
     track_lin_vel_xy_exp = RewTerm(
         func=mdp.rewards.track_lin_vel_xy_exp,
         params={"command_name": "base_velocity", "std": 0.6},  # std 越小，偏差罚得越快
-        weight=4.0,
+        weight=3.0,
     )
     track_ang_vel_z_exp = RewTerm(
         func=mdp.rewards.track_ang_vel_z_exp,
         params={"command_name": "base_velocity", "std": 0.6},
-        weight=4.0,
+        weight=3.0,
     )
     # ★ 新增：残差平滑度惩罚 (专治左右画龙)
     # 专门绞杀微小高频抖动 (一阶导 L1，新加入！)
@@ -381,9 +381,9 @@ class SkidSteerLegRewardsCfg:
                 "contact_forces",
                 body_names=["w_lf", "w_rf", "w_lb", "w_rb"],  # 四个轮子 link
             ),
-            "max_air_time": 0.5,
+            "max_air_time": 0.05,
         },
-        weight=-0.1,   # 先给一个比较温和的权重，后面看效果再调
+        weight=-0.5,   # 先给一个比较温和的权重，后面看效果再调
     )
 
     #log_pitch_monitor = RewTerm(
