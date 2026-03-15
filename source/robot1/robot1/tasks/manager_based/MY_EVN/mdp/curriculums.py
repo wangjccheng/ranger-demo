@@ -218,7 +218,7 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "action_rate_l1_pen",
             "start_weight": 0.0,
-            "end_weight": -1.0,
+            "end_weight": -5.0,
             "total_steps": 1.8e5,
         },
     )
@@ -302,7 +302,7 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "true_wheel_slip",     # 真实轮滑惩罚
             "start_weight": 0.0,
-            "end_weight": -1,
+            "end_weight": -5.0,
             "total_steps": 1.5e5,
         },
     )
@@ -357,7 +357,7 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "dof_torques_l2",    # 抑制扭矩
             "start_weight": 0.0,
-            "end_weight": -1.0e-6,
+            "end_weight": -1.0e-5,
             "total_steps": 2.2e5,
         },
     )
@@ -378,7 +378,7 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "dof_acc_l2",    # 抑制加速度
             "start_weight": 0.0,
-            "end_weight": -5.0e-7,
+            "end_weight": -1.0e-5,
             "total_steps": 1.6e5,
         },
     )

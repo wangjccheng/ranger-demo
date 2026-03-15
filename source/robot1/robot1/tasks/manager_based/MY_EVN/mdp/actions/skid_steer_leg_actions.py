@@ -42,7 +42,7 @@ class SkidSteerLegAction(ActionTerm):
         self.eha_lag_alpha      = getattr(cfg, "eha_lag_alpha", 0.6)
 
         # ★ 新增：残差缩放系数 (Residual Scale)，最大允许神经网络微调 ±5 rad/s
-        self._residual_scale = getattr(cfg, "residual_scale", 1.0)
+        self._residual_scale = getattr(cfg, "residual_scale", 0.1)
 
         # ★ 修改：动作维度 = 2 (主线速度v,角速度w) + 4 (四个轮子的残差) + N (腿部数量)
         self._action_dim = 2 + 4 + len(self._leg_ids)
