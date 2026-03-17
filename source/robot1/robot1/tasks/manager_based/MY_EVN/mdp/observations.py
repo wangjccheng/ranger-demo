@@ -44,10 +44,10 @@ def masked_height_scan(env, sensor_cfg: SceneEntityCfg, mask_region: str = "rand
 
         # --- 执行切片抹黑 (赋值为 -2.0) ---
         # 抹黑一侧的方块
-        grid_h[:, x_start:x_end, :y_right_end] = -2.0
+        grid_h[:, x_start:x_end, :y_right_end] = -0.4
         
         # 抹黑另一侧的方块
-        grid_h[:, x_start:x_end, y_left_start:] = -2.0
+        grid_h[:, x_start:x_end, y_left_start:] = -0.4
 
     elif mask_region == "front":
         # 保留原有的前方遮挡选项
@@ -134,16 +134,16 @@ class SkidSteerLegObsCfg:
     class Policy(ObsGroup):
         # --- 本体感知 (Proprioception) ---
         # 【改进】移除了 base_lin_vel。逼迫 GRU 从角速度、重力和 last_action 中隐式推断线速度
-        base_ang_vel = ObsTerm(func=mdp.base_ang_vel, noise=Gnoise(std=0.05), clip=(-10,10))
-        projected_grav = ObsTerm(func=mdp.projected_gravity, noise=Unoise(n_min=-0.03, n_max=0.03))
+        base_ang_vel = ObsTerm(func=mdp.base_ang_vel, scale = 2 ,noise=Gnoise(std=0.02), clip=(-1,1))
+        projected_grav = ObsTerm(func=mdp.projected_gravity, noise=Unoise(n_min=-0.01, n_max=0.01),clip=(-1,1))
 
         # 指令
-        cmd_vw = ObsTerm(func=cmd_vel_2d, params={"command_name": "base_velocity"})
+        cmd_vw = ObsTerm(func=cmd_vel_2d, scale = (1.0,2.0),params={"command_name": "base_velocity"},clip=(-1,1))
 
         # 关节状态
-        wheel_vel = ObsTerm(func=wheel_joint_vel, params={"asset_cfg": SceneEntityCfg("robot", joint_names="w_.*")}, clip=(-200, 200))
-        leg_pos = ObsTerm(func=leg_joint_pos, params={"asset_cfg": SceneEntityCfg("robot", joint_names="g_.*")})
-        leg_vel = ObsTerm(func=leg_joint_vel, params={"asset_cfg": SceneEntityCfg("robot", joint_names="g_.*")})
+        wheel_vel = ObsTerm(func=wheel_joint_vel, scale = 0.2 ,params={"asset_cfg": SceneEntityCfg("robot", joint_names="w_.*")}, clip=(-1, 1))
+        leg_pos = ObsTerm(func=leg_joint_pos, scale =3 ,params={"asset_cfg": SceneEntityCfg("robot", joint_names="g_.*")},clip=(-1, 1))
+        leg_vel = ObsTerm(func=leg_joint_vel,scale = 0.3, params={"asset_cfg": SceneEntityCfg("robot", joint_names="g_.*")},clip=(-1, 1))
         #leg_pos_norm = ObsTerm(func=leg_pos_normalized, params={"asset_cfg": SceneEntityCfg("robot", joint_names="g_.*")})
 
         # 【改进】移除了 slip_feat，因为它包含不可知的特权速度信息
@@ -154,8 +154,9 @@ class SkidSteerLegObsCfg:
         # --- 外界感知 (Exteroception) ---
         height_scan = ObsTerm(
             func=masked_height_scan,
+            scale=2.0,
             params={"sensor_cfg": SceneEntityCfg("height_scanner"), "mask_region": "sides"},
-            clip=(-2.0, 2.0),
+            clip=(-1.0, 1.0),
             noise=Gnoise(std=0.01),  # 适度噪声，增强鲁棒性
             
         )
@@ -171,17 +172,17 @@ class SkidSteerLegObsCfg:
     class Critic(ObsGroup):
         # --- 真实状态 (Ground Truth) ---
         # Critic 拥有环境的全部真实物理状态
-        base_lin_vel = ObsTerm(func=mdp.base_lin_vel, noise=None)
-        base_ang_vel = ObsTerm(func=mdp.base_ang_vel, noise=None)
-        projected_grav = ObsTerm(func=mdp.projected_gravity, noise=None)
-        
+        base_lin_vel = ObsTerm(func=mdp.base_lin_vel, noise=None, clip=(-1,1))
+        base_ang_vel = ObsTerm(func=mdp.base_ang_vel,scale = 2 ,noise=None, clip=(-1,1))
+        projected_grav = ObsTerm(func=mdp.projected_gravity, noise=None, clip=(-1,1))
+
         # 关节信息
-        wheel_vel = ObsTerm(func=wheel_joint_vel, params={"asset_cfg": SceneEntityCfg("robot", joint_names="w_.*")})
-        leg_pos = ObsTerm(func=leg_joint_pos, params={"asset_cfg": SceneEntityCfg("robot", joint_names="g_.*")})
-        leg_vel = ObsTerm(func=leg_joint_vel, params={"asset_cfg": SceneEntityCfg("robot", joint_names="g_.*")})
+        wheel_vel = ObsTerm(func=wheel_joint_vel, scale = 0.2 ,params={"asset_cfg": SceneEntityCfg("robot", joint_names="w_.*")}, clip=(-1, 1))
+        leg_pos = ObsTerm(func=leg_joint_pos, scale =3 ,params={"asset_cfg": SceneEntityCfg("robot", joint_names="g_.*")},clip=(-1, 1))
+        leg_vel = ObsTerm(func=leg_joint_vel,scale = 0.3, params={"asset_cfg": SceneEntityCfg("robot", joint_names="g_.*")},clip=(-1, 1))
         #leg_pos_norm = ObsTerm(func=leg_pos_normalized, params={"asset_cfg": SceneEntityCfg("robot", joint_names="g_.*")})
         
-        cmd_vw = ObsTerm(func=cmd_vel_2d, params={"command_name": "base_velocity"})
+        cmd_vw = ObsTerm(func=cmd_vel_2d, scale = (1.0,2.0),params={"command_name": "base_velocity"},clip=(-1,1))
         last_action = ObsTerm(func=mdp.last_action, clip=(-1, 1))
 
         # 【改进】特权物理特征：精确的打滑数据，只给 Critic 用来算 Value
@@ -191,8 +192,9 @@ class SkidSteerLegObsCfg:
         # Critic 看到无盲区、无噪声的高度图
         full_height_scan = ObsTerm(
             func=mdp.height_scan,
+            scale=2.0,
             params={"sensor_cfg": SceneEntityCfg("height_scanner")},
-            clip=(-2.0, 2.0),
+            clip=(-1.0, 1.0),
             noise=None
         )
 

@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 import isaaclab.envs.mdp as mdp
 import isaaclab.utils.math as math_utils
 from isaaclab.utils import configclass
@@ -138,7 +139,8 @@ def residual_mean_penalty(env, residual_indices: list = [2, 3, 4, 5]) -> torch.T
 def flat_orientation_with_tolerance(
     env: ManagerBasedRLEnv, 
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
-    tolerance_deg: float = 2.0  # 容忍度（度）
+    tolerance_deg: float = 2.0 , # 容忍度（度）
+    beta: float = 0.1              # 平滑参数 (Smooth L1 的 beta)
 ) -> torch.Tensor:
     """
     带死区的平稳奖励：
@@ -161,10 +163,11 @@ def flat_orientation_with_tolerance(
     # 5. 计算超出部分
     excess_tilt = torch.clamp(tilt_magnitude - threshold, min=0.0)
     
-    # 6. 返回 L2 惩罚 (平方)
-    #return torch.sum(excess_tilt**2, dim=0) # 返回形状通常需要匹配 [N] 或标量，这里建议直接返回 excess_tilt 的平方
-    # 注意：IsaacLab 的 RewTerm 会自动处理 batch 维度，通常返回 [N]
-    return excess_tilt ** 2
+    # ★ 核心修改：使用 Smooth L1 替换 excess_tilt ** 2
+    # 将 excess_tilt 往 0 压迫，使用 beta 进行平滑
+    penalty = F.smooth_l1_loss(excess_tilt, torch.zeros_like(excess_tilt), reduction='none', beta=beta)
+    
+    return penalty
 
 def true_wheel_slip_l2_with_smart_deadzone(
     env,
@@ -172,6 +175,7 @@ def true_wheel_slip_l2_with_smart_deadzone(
     wheel_radius: float = 0.19,
     base_tolerance: float = 0.1,  # 直线行驶时的极严死区 (抓不转的轮子)
     turn_allowance: float = 0.8,   # 转向时的放宽系数
+    beta=0.2
 ) -> torch.Tensor:
     asset = env.scene["robot"]
     body_ids, _ = asset.find_bodies(wheel_body_names)
@@ -209,10 +213,9 @@ def true_wheel_slip_l2_with_smart_deadzone(
     # 4. 用动态死区过滤误差 (转弯时这里的 excess_slip 会被完美吃掉，变成 0)
     excess_slip = torch.clamp(slip_error - smart_tolerance, min=0.0)
     
-    # 5. 平方惩罚
-    slip_penalty = torch.sum(excess_slip**2, dim=1)
+    penalty = F.smooth_l1_loss(excess_slip, torch.zeros_like(excess_slip), reduction='none', beta=beta)
     
-    return slip_penalty
+    return torch.sum(penalty, dim=1)
 # ---------------------------
 # 自定义奖励项（与动作对齐）
 # ---------------------------
@@ -300,30 +303,30 @@ class SkidSteerLegRewardsCfg:
     )
     # ★ 新增：残差平滑度惩罚 (专治左右画龙)
     # 专门绞杀微小高频抖动 (一阶导 L1，新加入！)
-    action_rate_l1_pen = RewTerm(func=action_rate_l1, weight=-0.1)
+    action_rate_l1_pen = RewTerm(func=action_rate_l1, weight=-0)
 
     # 残差项的双重惩罚 (抑制左右轮速微调画龙)
     residual_rate_l2_pen = RewTerm(
-        func=residual_rate_l2, params={"residual_indices": [2, 3, 4, 5]}, weight=-0.1
+        func=residual_rate_l2, params={"residual_indices": [2, 3, 4, 5]}, weight=-0
     )
     residual_rate_l1_pen = RewTerm(
-        func=residual_rate_l1, params={"residual_indices": [2, 3, 4, 5]}, weight=-0.05
+        func=residual_rate_l1, params={"residual_indices": [2, 3, 4, 5]}, weight=-0
     )
     # 2) 车身稳定/抑制弹跳 [4]
-    flat_orientation_l2 = RewTerm(func=flat_orientation_with_tolerance, weight=-1000.0)
-    ang_vel_xy_l2       = RewTerm(func=mdp.rewards.ang_vel_xy_l2,       weight=-0.1)
-    lin_vel_z_l2        = RewTerm(func=mdp.rewards.lin_vel_z_l2,        weight=-0.1)
+    flat_orientation_l2 = RewTerm(func=flat_orientation_with_tolerance, weight=0)
+    ang_vel_xy_l2       = RewTerm(func=mdp.rewards.ang_vel_xy_l2,       weight=0)
+    lin_vel_z_l2        = RewTerm(func=mdp.rewards.lin_vel_z_l2,        weight=-0)
 
     # 3) 调距关节使用与平滑（自定义）
     leg_center_l2 = RewTerm(
         func=leg_pos_center_l2,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names="g_.*")},
-        weight=-0.05,
+        weight=-0.0,
     )
     leg_speed_l2 = RewTerm(
         func=leg_vel_l2,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names="g_.*")},
-        weight=-0.02,
+        weight=-0.0,
     )
     '''
     # 4) 打滑一致性（自定义）=
@@ -347,19 +350,19 @@ class SkidSteerLegRewardsCfg:
             "base_tolerance": 0.08,
             "turn_allowance": 0.3
         },
-        weight=-1.0,  # 这里的权重不需要像之前 -20 那么极端，-2 到 -5 之间就足够让它学会踩地了
+        weight=-0,  # 这里的权重不需要像之前 -20 那么极端，-2 到 -5 之间就足够让它学会踩地了
     )
     
     residual_mean_pen = RewTerm(
         func=residual_mean_penalty,
         params={"residual_indices": [2, 3, 4, 5]},
-        weight=-1.0, 
+        weight=-0, 
     )
 
     # 5) 能耗与控制平滑 [4]
-    dof_torques_l2 = RewTerm(func=mdp.rewards.joint_torques_l2, weight=-2.5e-6)
-    dof_acc_l2     = RewTerm(func=mdp.rewards.joint_acc_l2,     weight=-5.0e-4)
-    action_rate_l2 = RewTerm(func=mdp.rewards.action_rate_l2,   weight=-0.05)
+    dof_torques_l2 = RewTerm(func=mdp.rewards.joint_torques_l2, weight=0)
+    dof_acc_l2     = RewTerm(func=mdp.rewards.joint_acc_l2,     weight=-0)
+    action_rate_l2 = RewTerm(func=mdp.rewards.action_rate_l2,   weight=-0)
 
     # 6) 可选：卡住终止的惩罚（依赖 TerminationManager 的 "stuck" 条目）[4][5]
     #stuck_penalty = RewTerm(
@@ -383,7 +386,7 @@ class SkidSteerLegRewardsCfg:
             ),
             "max_air_time": 0.05,
         },
-        weight=-0.5,   # 先给一个比较温和的权重，后面看效果再调
+        weight=-1,   # 先给一个比较温和的权重，后面看效果再调
     )
 
     #log_pitch_monitor = RewTerm(

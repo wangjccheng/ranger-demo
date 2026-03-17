@@ -208,18 +208,67 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "track_lin_vel_xy_exp", 
             "param_name": "std",
-            "start_val": 0.6,           # 初始：允许 ±1m/s 的误差仍有较高奖励
+            "start_val": 0.8,           # 初始：允许 ±1m/s 的误差仍有较高奖励
             "end_val": 0.2,             # 最终：必须非常精准 (您原本的设定)
-            "total_steps": 0.8e5,       # 在 2亿步(约一半训练程)内完成收紧
+            "total_steps": 2.5e5,       # 在 2亿步(约一半训练程)内完成收紧
         },
     )
+
+
+
+    # 如果角速度也难学，加上这个
+    anneal_ang_vel_std = CurrTerm(
+        func=anneal_reward_term_param,
+        params={
+            "term_name": "track_ang_vel_z_exp",
+            "param_name": "std",
+            "start_val": 0.8,
+            "end_val": 0.2, 
+            "total_steps": 2.5e5,
+        },
+    )
+    anneal_flat_orientation_penalty = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "flat_orientation_l2",  # 对应 rewards 配置中的名字
+            "start_weight": 0.0,                # 初期：轻微惩罚，允许它歪歪扭扭地跑
+            "end_weight": -50.0,                # 后期：重罚，强迫它收敛到水平姿态
+            "total_steps": 1.5e5,                # 在前 10万~20万步完成过渡
+        },
+    )
+    
+    action_rate_penalty = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "action_rate_l2",    # 抑制动作变化率
+            "start_weight": 0.0,
+            "end_weight": -1.0,
+            "total_steps": 1.5e5,
+        },
+    )
+
+    # --- B. 惩罚项权重：由无到有 (weight: 0.0 -> -0.005) ---
+    # 这解决了“因惧怕惩罚而不敢动”的问题
+    # 针对 rewards.py [1] 中的惩罚项
+    '''
     action_rate_l1_pen = CurrTerm(
         func=anneal_reward_term_weight,
         params={
             "term_name": "action_rate_l1_pen",
             "start_weight": 0.0,
-            "end_weight": -5.0,
+            "end_weight": -0.1,
             "total_steps": 1.8e5,
+        },
+    )
+
+     
+    residual_mean_pen = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "residual_mean_pen",     # 残差
+            "start_weight": 0.0,
+            "end_weight": -5,
+            "total_steps": 1.5e5,
         },
     )
     residual_rate_l2_pen = CurrTerm(
@@ -240,62 +289,7 @@ class SkidSteerLegCurriculumCfg:
             "total_steps": 1.8e5,
         },
     )
-
-    # 如果角速度也难学，加上这个
-    anneal_ang_vel_std = CurrTerm(
-        func=anneal_reward_term_param,
-        params={
-            "term_name": "track_ang_vel_z_exp",
-            "param_name": "std",
-            "start_val": 0.6,
-            "end_val": 0.2, 
-            "total_steps": 0.8e5,
-        },
-    )
-    anneal_flat_orientation_penalty = CurrTerm(
-        func=anneal_reward_term_weight,
-        params={
-            "term_name": "flat_orientation_l2",  # 对应 rewards 配置中的名字
-            "start_weight": 0.0,                # 初期：轻微惩罚，允许它歪歪扭扭地跑
-            "end_weight": -10.0,                # 后期：重罚，强迫它收敛到水平姿态
-            "total_steps": 1.2e5,                # 在前 10万~20万步完成过渡
-        },
-    )
-
-    # --- B. 惩罚项权重：由无到有 (weight: 0.0 -> -0.005) ---
-    # 这解决了“因惧怕惩罚而不敢动”的问题
-    # 针对 rewards.py [1] 中的惩罚项
-    '''
-    anneal_slip_penalty = CurrTerm(
-        func=anneal_reward_term_weight,
-        params={
-            "term_name": "slip_consistency", # 对应 rewards.py 中的变量名
-            "start_weight": 0.0,             # 初始：不惩罚打滑
-            "end_weight": -1,            # 最终：施加惩罚 (您原本的设定)
-            "total_steps": 1.5e5,            # 较快引入惩罚(1亿步)，尽早规范动作
-        },
-    )
-   
-    
-    residual_rate_pen = CurrTerm(
-        func=anneal_reward_term_weight,
-        params={
-            "term_name": "residual_rate_pen",     # 残差
-            "start_weight": 0.0,
-            "end_weight": -1,
-            "total_steps": 1.5e5,
-        },
-    )
-     '''
-    residual_mean_pen = CurrTerm(
-        func=anneal_reward_term_weight,
-        params={
-            "term_name": "residual_mean_pen",     # 残差
-            "start_weight": 0.0,
-            "end_weight": -5,
-            "total_steps": 1.5e5,
-        },
-    )
+ 
     
     true_wheel_slip = CurrTerm(
         func=anneal_reward_term_weight,
@@ -307,7 +301,7 @@ class SkidSteerLegCurriculumCfg:
         },
     )
     
-    
+
     anneal_bounce_penalty = CurrTerm(
         func=anneal_reward_term_weight,
         params={
@@ -327,6 +321,7 @@ class SkidSteerLegCurriculumCfg:
             "total_steps": 1.2e5,
         },
     )
+   
     # 新增：滤波系数退火
     # 逻辑：前期 α=0.05 (极度平滑) 帮助收敛；后期 α=0.2 (提高响应)
     anneal_filter_alpha = CurrTerm(
@@ -338,6 +333,7 @@ class SkidSteerLegCurriculumCfg:
             "total_steps": 1.5e5,         # 建议与主要奖励退火节奏一致
         },
     )
+   
     # 抑制调距关节速度
     led_speed_penalty = CurrTerm(func=anneal_reward_term_weight,params={"term_name": "leg_speed_l2", "start_weight": 0.0,"end_weight": -0.2,"total_steps": 1.3e5,},)
     
@@ -351,28 +347,11 @@ class SkidSteerLegCurriculumCfg:
             "total_steps": 1.5e5,
         },
     )
- 
-    dof_torques_penalty = CurrTerm(
-        func=anneal_reward_term_weight,
-        params={
-            "term_name": "dof_torques_l2",    # 抑制扭矩
-            "start_weight": 0.0,
-            "end_weight": -1.0e-5,
-            "total_steps": 2.2e5,
-        },
-    )
+     '''
 
-    action_rate_penalty = CurrTerm(
-        func=anneal_reward_term_weight,
-        params={
-            "term_name": "action_rate_l2",    # 抑制动作变化率
-            "start_weight": 0.0,
-            "end_weight": -1,
-            "total_steps": 1.8e5,
-        },
-    )
+
     
-
+    '''
     dof_acc_penalty = CurrTerm(
         func=anneal_reward_term_weight,
         params={
@@ -382,7 +361,17 @@ class SkidSteerLegCurriculumCfg:
             "total_steps": 1.6e5,
         },
     )
+    dof_torques_penalty = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "dof_torques_l2",    # 抑制扭矩
+            "start_weight": 0.0,
+            "end_weight": -1.0e-5,
+            "total_steps": 2.2e5,
+        },
+    )
     
+    '''
     terrain_levels = CurrTerm(func=terrain_levels_vel)
     
     contact_penalty = CurrTerm(

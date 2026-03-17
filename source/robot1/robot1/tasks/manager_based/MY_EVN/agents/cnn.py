@@ -36,7 +36,9 @@ class CNNActorCriticRecurrent(ActorCriticRecurrent):
             init_noise_std=init_noise_std,
             **kwargs
         )
-        
+        # ★ 核心操作：在 Actor 的输出层追加 Tanh
+        # self.actor 通常是一个 nn.Sequential
+        self.actor.add_module("action_tanh", nn.Tanh())
         # 定义极其轻量级的 CNN 编码器 (感受野和步长适配 20x20 的输入)
         # 包含两层卷积，将 20x20 降采样为 5x5
         # 定义极其轻量级的 CNN 编码器 (感受野和步长适配 21x21 的输入)
@@ -49,7 +51,7 @@ class CNNActorCriticRecurrent(ActorCriticRecurrent):
             nn.Flatten(),
             # ★ 核心修改：输入 25x25 经过两层 stride=2 的卷积后，特征图变成了 7x7
             nn.Linear(32 * 7 * 7, self.latent_dim), 
-            nn.ELU()
+            nn.Tanh()
         )
 
     def process_obs(self, obs):
