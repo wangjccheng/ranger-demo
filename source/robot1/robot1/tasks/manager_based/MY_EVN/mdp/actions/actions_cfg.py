@@ -33,10 +33,10 @@ class SkidSteerLegActionCfg(ActionTermCfg):
     leg_offset: float = 0.05                      # False 时，线性映射的偏置
     # +++ 【新增】: 低通滤波系数 (模拟响应延迟) +++
     # alpha 范围 (0, 1]。1.0 代表理想执行器(无延迟)，数值越小延迟/惯性越大
-    action_alpha: float = 0.5
-    
+    eha_lag_alpha: float = 0.5
+    actuator_lag_alpha: float = 0.8
     delay_steps_min: int = 1
-    delay_steps_max: int = 3
+    delay_steps_max: int = 2
 
 @configclass
 class ActionsCfg:
@@ -52,5 +52,6 @@ class ActionsCfg:
         no_reverse=False,
         leg_rescale_to_limits=False,  # 建议用软限反归一化
         # +++ 【新增】 +++
-        action_alpha=1, # 建议从 0.3 或 0.4 开始训练
+        eha_lag_alpha=0.5,
+        actuator_lag_alpha=0.8,
     )

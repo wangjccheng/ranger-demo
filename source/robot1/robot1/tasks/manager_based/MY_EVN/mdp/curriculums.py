@@ -210,7 +210,7 @@ class SkidSteerLegCurriculumCfg:
             "param_name": "std",
             "start_val": 0.8,           # 初始：允许 ±1m/s 的误差仍有较高奖励
             "end_val": 0.2,             # 最终：必须非常精准 (您原本的设定)
-            "total_steps": 2.5e5,       # 在 2亿步(约一半训练程)内完成收紧
+            "total_steps": 2.0e5,       # 在 2亿步(约一半训练程)内完成收紧
         },
     )
 
@@ -224,7 +224,7 @@ class SkidSteerLegCurriculumCfg:
             "param_name": "std",
             "start_val": 0.8,
             "end_val": 0.2, 
-            "total_steps": 2.5e5,
+            "total_steps": 2.0e5,
         },
     )
     anneal_flat_orientation_penalty = CurrTerm(
@@ -236,7 +236,32 @@ class SkidSteerLegCurriculumCfg:
             "total_steps": 1.5e5,                # 在前 10万~20万步完成过渡
         },
     )
-    
+    action_rate_l1_pen = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "action_rate_l1_pen",
+            "start_weight": 0.0,
+            "end_weight": -10.0,
+            "total_steps": 1.5e5,
+        },
+    )
+        # 抑制调距关节速度
+    led_speed_penalty = CurrTerm(
+        func=anneal_reward_term_weight,
+        params={
+            "term_name": "leg_speed_l2", 
+            "start_weight": 0.0,
+            "end_weight": -5.0,
+            "total_steps": 1.5e5,
+        },
+    )
+
+
+    # --- B. 惩罚项权重：由无到有 (weight: 0.0 -> -0.005) ---
+    # 这解决了“因惧怕惩罚而不敢动”的问题
+    # 针对 rewards.py [1] 中的惩罚项
+    '''
+
     action_rate_penalty = CurrTerm(
         func=anneal_reward_term_weight,
         params={
@@ -244,20 +269,6 @@ class SkidSteerLegCurriculumCfg:
             "start_weight": 0.0,
             "end_weight": -1.0,
             "total_steps": 1.5e5,
-        },
-    )
-
-    # --- B. 惩罚项权重：由无到有 (weight: 0.0 -> -0.005) ---
-    # 这解决了“因惧怕惩罚而不敢动”的问题
-    # 针对 rewards.py [1] 中的惩罚项
-    '''
-    action_rate_l1_pen = CurrTerm(
-        func=anneal_reward_term_weight,
-        params={
-            "term_name": "action_rate_l1_pen",
-            "start_weight": 0.0,
-            "end_weight": -0.1,
-            "total_steps": 1.8e5,
         },
     )
 
@@ -334,9 +345,7 @@ class SkidSteerLegCurriculumCfg:
         },
     )
    
-    # 抑制调距关节速度
-    led_speed_penalty = CurrTerm(func=anneal_reward_term_weight,params={"term_name": "leg_speed_l2", "start_weight": 0.0,"end_weight": -0.2,"total_steps": 1.3e5,},)
-    
+
     
     led_center_penalty = CurrTerm(
         func=anneal_reward_term_weight,

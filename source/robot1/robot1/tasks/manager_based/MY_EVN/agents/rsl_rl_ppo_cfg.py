@@ -9,7 +9,7 @@ from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, R
 
 @configclass
 class PPORunnerCfg(RslRlOnPolicyRunnerCfg):
-    num_steps_per_env = 128
+    num_steps_per_env = 256
     max_iterations = 3000
     save_interval = 500  # 建议改大一点，解决硬盘占用问题
     experiment_name = "youxia_manager"
@@ -35,12 +35,12 @@ class PPORunnerCfg(RslRlOnPolicyRunnerCfg):
         value_loss_coef=1.0,
         use_clipped_value_loss=True,
         clip_param=0.2,
-        entropy_coef=0.001,
+        entropy_coef=0.01,
         num_learning_epochs=5,
         num_mini_batches=8,#降低显存使用，增加训练时间
-        learning_rate=1.0e-5,
+        learning_rate=1.0e-3,
         schedule="adaptive",
-        gamma=0.99,
+        gamma=0.995,
         lam=0.95,
         desired_kl=0.01,
         max_grad_norm=1.0,

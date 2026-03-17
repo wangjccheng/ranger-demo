@@ -60,7 +60,7 @@ class SkidSteerLegAction(ActionTerm):
         # ==========================================================
         # 默认延迟 1~3 个 RL step (以 50Hz 计，相当于 20ms~60ms 随机死区)
         self.min_delay = getattr(cfg, "delay_steps_min", 1)
-        self.max_delay = getattr(cfg, "delay_steps_max", 3)
+        self.max_delay = getattr(cfg, "delay_steps_max", 2)
         
         # 队列形状: [最大延迟帧数 + 1, 环境数量, 动作维度]
         self._action_history = torch.zeros(
@@ -106,12 +106,12 @@ class SkidSteerLegAction(ActionTerm):
         # [新增逻辑] 清空通信延迟队列
         self._action_history[:, env_ids, :] = 0.0
         # 重新为这些环境随机分配延迟帧数，增强域随机化
-        self._current_delays[env_ids] = 0
-        #self._current_delays[env_ids] = torch.randint(
-        #    self.min_delay, self.max_delay + 1, 
-        #    (len(env_ids),), 
-        #    device=self.device
-        #)
+        #self._current_delays[env_ids] = 0
+        self._current_delays[env_ids] = torch.randint(
+            self.min_delay, self.max_delay + 1, 
+            (len(env_ids),), 
+            device=self.device
+        )
 
     def process_actions(self, actions: torch.Tensor):
         actions = torch.clamp(actions.detach(), -1.0, 1.0)
@@ -192,36 +192,3 @@ class SkidSteerLegAction(ActionTerm):
         self._prev_leg_pos_cmd[:]   = leg_pos_cmd
         self._asset.set_joint_velocity_target(wheel_vel_cmd, joint_ids=self._all_wheel_ids)
         self._asset.set_joint_position_target(leg_pos_cmd, joint_ids=self._leg_ids)
-        
-        '''
-    def apply_actions(self):
-        """
-        [Sim2Real 核心] 物理执行层：结合隐式控制与低通延迟
-        此时接收到的 self._processed_actions 已经是经过“通讯延迟”之后的滞后指令了
-        """
-        # 第一步：运动学解算 (算出理想目标值)
-        v, omega = self._processed_actions[:, 0], self._processed_actions[:, 1]
-        
-        wl = (v - omega * (self.W / 2.0)) / self.r
-        wr = (v + omega * (self.W / 2.0)) / self.r
-        nL, nR = len(self._left_ids), len(self._right_ids)
-        wheel_vel_target = torch.cat([wl.view(-1, 1).expand(-1, nL), wr.view(-1, 1).expand(-1, nR)], dim=1)
-        
-        leg_pos_target = self._processed_actions[:, 2:]
-
-        # 第二步：物理迟滞模拟 (Low Pass Filter)
-        # 模拟电机发力缓慢和 EHA 液压油建压的过程
-        wheel_vel_cmd = (self.actuator_lag_alpha * wheel_vel_target + 
-                         (1 - self.actuator_lag_alpha) * self._prev_wheel_vel_cmd).detach()
-        leg_pos_cmd   = (self.eha_lag_alpha * leg_pos_target + 
-                         (1 - self.eha_lag_alpha) * self._prev_leg_pos_cmd).detach()
-        
-        # 更新历史缓存
-        self._prev_wheel_vel_cmd[:] = wheel_vel_cmd
-        self._prev_leg_pos_cmd[:]   = leg_pos_cmd
-
-        # 第三步：下发给物理引擎底层 
-        self._asset.set_joint_velocity_target(wheel_vel_cmd, joint_ids=self._all_wheel_ids)
-        self._asset.set_joint_position_target(leg_pos_cmd, joint_ids=self._leg_ids)
-        '''
-
