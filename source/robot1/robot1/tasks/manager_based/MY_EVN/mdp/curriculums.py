@@ -232,7 +232,7 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "flat_orientation_l2",  # 对应 rewards 配置中的名字
             "start_weight": 0.0,                # 初期：轻微惩罚，允许它歪歪扭扭地跑
-            "end_weight": -50.0,                # 后期：重罚，强迫它收敛到水平姿态
+            "end_weight": -10.0,                # 后期：重罚，强迫它收敛到水平姿态
             "total_steps": 1.5e5,                # 在前 10万~20万步完成过渡
         },
     )
@@ -241,7 +241,7 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "action_rate_l1_pen",
             "start_weight": 0.0,
-            "end_weight": -10.0,
+            "end_weight": -1.0,
             "total_steps": 1.5e5,
         },
     )
@@ -251,7 +251,7 @@ class SkidSteerLegCurriculumCfg:
         params={
             "term_name": "leg_speed_l2", 
             "start_weight": 0.0,
-            "end_weight": -5.0,
+            "end_weight": -2.0,
             "total_steps": 1.5e5,
         },
     )
@@ -387,7 +387,7 @@ class SkidSteerLegCurriculumCfg:
         func=anneal_reward_term_weight,
         params={
             "term_name": "contact_penalty",  # 对应 rewards 配置中的名字
-            "start_weight": -0.2,                # 初期：不惩罚接触
+            "start_weight": 0.0,                # 初期：不惩罚接触
             "end_weight": -10.0,                # 后期：重罚，强迫它避免接触障碍物
             "total_steps": 1.0e5,                # 在前 10万~20万步完成过渡
         },
