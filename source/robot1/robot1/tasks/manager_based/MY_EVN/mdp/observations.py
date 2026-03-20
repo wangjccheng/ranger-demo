@@ -141,9 +141,9 @@ class SkidSteerLegObsCfg:
         cmd_vw = ObsTerm(func=cmd_vel_2d, scale = (1.0,2.0),params={"command_name": "base_velocity"},clip=(-1,1))
 
         # 关节状态
-        wheel_vel = ObsTerm(func=wheel_joint_vel, scale = 0.2 ,params={"asset_cfg": SceneEntityCfg("robot", joint_names="w_.*")}, clip=(-1, 1))
-        leg_pos = ObsTerm(func=leg_joint_pos, scale =3 ,params={"asset_cfg": SceneEntityCfg("robot", joint_names="g_.*")},clip=(-1, 1))
-        leg_vel = ObsTerm(func=leg_joint_vel,scale = 0.3, params={"asset_cfg": SceneEntityCfg("robot", joint_names="g_.*")},clip=(-1, 1))
+        #wheel_vel = ObsTerm(func=wheel_joint_vel, scale = 0.2 ,params={"asset_cfg": SceneEntityCfg("robot", joint_names="w_.*")}, clip=(-1, 1))
+        #leg_pos = ObsTerm(func=leg_joint_pos, scale =3 ,params={"asset_cfg": SceneEntityCfg("robot", joint_names="g_.*")},clip=(-1, 1))
+        #leg_vel = ObsTerm(func=leg_joint_vel,scale = 0.3, params={"asset_cfg": SceneEntityCfg("robot", joint_names="g_.*")},clip=(-1, 1))
         #leg_pos_norm = ObsTerm(func=leg_pos_normalized, params={"asset_cfg": SceneEntityCfg("robot", joint_names="g_.*")})
 
         # 【改进】移除了 slip_feat，因为它包含不可知的特权速度信息

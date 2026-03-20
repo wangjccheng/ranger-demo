@@ -12,7 +12,7 @@ ROBOT1_CFG = ArticulationCfg(
             max_depenetration_velocity=10000.0,
         ),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-            enabled_self_collisions=True, solver_position_iteration_count=4, solver_velocity_iteration_count=1
+            enabled_self_collisions=True, solver_position_iteration_count=8, solver_velocity_iteration_count=4
         ),
     ),
     init_state=ArticulationCfg.InitialStateCfg(
@@ -46,20 +46,20 @@ ROBOT1_CFG = ArticulationCfg(
             "g_rf",
             "g_rb",
             ],
-            effort_limit_sim=500,
+            effort_limit_sim=800,
             velocity_limit_sim=3.0,
             stiffness={
-            "g_lb": 2400,
-            "g_lf": 2400,
-            "g_rf": 2400,
-            "g_rb": 2400,
+            "g_lb": 0,
+            "g_lf": 0,
+            "g_rf": 0,
+            "g_rb": 0,
             },
             #200
             damping={
-            "g_lb": 300.0,
-            "g_lf": 300.0,
-            "g_rf": 300.0,
-            "g_rb": 300.0,
+            "g_lb": 100000.0,
+            "g_lf": 100000.0,
+            "g_rf": 100000.0,
+            "g_rb": 100000.0,
             },
             #30
                 ),
@@ -71,19 +71,19 @@ ROBOT1_CFG = ArticulationCfg(
             "w_rb",
             ],
             #saturation_effort=1000.0,
-            effort_limit=200,
-            velocity_limit=50,
+            effort_limit=130,
+            velocity_limit=40.0,
             stiffness={
-            "w_lb": 0.0001,
-            "w_lf": 0.0001,
-            "w_rf": 0.0001,
-            "w_rb": 0.0001,
+            "w_lb": 0,
+            "w_lf": 0,
+            "w_rf": 0,
+            "w_rb": 0,
             },
             damping={
-            "w_lb": 80.0,
-            "w_lf": 80.0,
-            "w_rf": 80.0,
-            "w_rb": 80.0,
+            "w_lb": 1000000.0,
+            "w_lf": 1000000.0,
+            "w_rf": 1000000.0,
+            "w_rb": 1000000.0,
             },
                 ),
     },

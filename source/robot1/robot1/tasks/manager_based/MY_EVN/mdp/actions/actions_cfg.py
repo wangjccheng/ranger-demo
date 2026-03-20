@@ -3,40 +3,42 @@ from isaaclab.managers import ActionTerm, ActionTermCfg
 from isaaclab.utils import configclass
 from . import skid_steer_leg_actions
 
+# 文件路径: .../MY_EVN/mdp/actions/actions_cfg.py
+
 @configclass
 class SkidSteerLegActionCfg(ActionTermCfg):
     class_type: type[ActionTerm] = skid_steer_leg_actions.SkidSteerLegAction
 
-    # 资产
     asset_name: str = "robot"
 
-    # 底盘几何
-    base_width: float = 0.68     # 轮距 W（左右轮中心距）
-    wheel_radius: float = 0.19  # 轮半径 r
+    # ==========================================
+    # ★ 修改点：删除运动学参数 base_width, wheel_radius, base_scale 等
+    # ★ 新增：直接控制轮子的转速映射系数
+    # 假设你的轮子期望最大转速是 10 rad/s (对应约 1.9 m/s)
+    # ==========================================
+    wheel_scale: float = 40.0   
+    wheel_offset: float = 0.0  
 
-    # 轮子关节名（保序）：建议显式列出，或提供能唯一匹配的正则
-    left_wheel_joint_names: list[str] = MISSING  # 例如 ["front_left_wheel_throttle", "back_left_wheel_throttle"]
-    right_wheel_joint_names: list[str] = MISSING # 例如 ["front_right_wheel_throttle","back_right_wheel_throttle"]
-
-    # 调距关节名：列表或正则表达式（如 "g_.*"）
+    left_wheel_joint_names: list[str] = MISSING 
+    right_wheel_joint_names: list[str] = MISSING 
     leg_joint_names: list[str] | str = MISSING
 
-    # 底盘标定/约束
-    base_scale: tuple[float, float] = (1.0, 0.5)  # 分别为 v 与 omega 的缩放
-    base_offset: tuple[float, float] = (0.0, 0.0)
-    bounding_strategy: str | None = "clip"       # "clip"/"tanh"/None
-    no_reverse: bool = False                     # True 则 v>=0
+    bounding_strategy: str | None = "clip"      
 
-    # 调距关节映射：二选一
-    leg_rescale_to_limits: bool = False           # True 时用软限把 [-1,1] 反归一化到实际范围
-    leg_scale: float = 0.30                      # False 时，线性映射的缩放
-    leg_offset: float = 0.05                      # False 时，线性映射的偏置
-    # +++ 【新增】: 低通滤波系数 (模拟响应延迟) +++
-    # alpha 范围 (0, 1]。1.0 代表理想执行器(无延迟)，数值越小延迟/惯性越大
+    leg_rescale_to_limits: bool = False           
+    leg_scale: float = 0.30                      
+    leg_offset: float = 0.05                      
+    
     eha_lag_alpha: float = 0.5
     actuator_lag_alpha: float = 0.8
-    delay_steps_min: int = 1
-    delay_steps_max: int = 2
+    
+    # ==========================================
+    # ★ 方案B 新增：每帧动作(Raw Action)的最大允许变化量
+    # 假设控制频率是 50Hz (0.02s)，如果设为 0.1，
+    # 意味着从 0 加速到 1 (满速) 至少需要 10 帧 (0.2秒)，非常安全平滑。
+    # ==========================================
+    max_action_delta: float = 0.1
+
 
 @configclass
 class ActionsCfg:
@@ -44,14 +46,14 @@ class ActionsCfg:
         asset_name="robot",
         left_wheel_joint_names=["w_lf", "w_lb"],
         right_wheel_joint_names=["w_rf", "w_rb"],
-        leg_joint_names=["g_lf", "g_rf", "g_lb", "g_rb"],  # 或 "g_.*"
-        base_width=0.68,
-        wheel_radius=0.19,
-        base_scale=(1.0, 0.5),
+        leg_joint_names=["g_lf", "g_rf", "g_lb", "g_rb"], 
+        
+        # ★ 传入新的参数
+        wheel_scale=40.0,
+        
         bounding_strategy="clip",
-        no_reverse=False,
-        leg_rescale_to_limits=False,  # 建议用软限反归一化
-        # +++ 【新增】 +++
-        eha_lag_alpha=0.5,
-        actuator_lag_alpha=0.8,
+        leg_rescale_to_limits=False,  
+        eha_lag_alpha=1.0,
+        actuator_lag_alpha=1.0,
+        max_action_delta = 0.2
     )
